@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
+import { getInstagramAccessToken, getInstagramAccountId } from "@/lib/instagram-token";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -28,8 +29,8 @@ function summarize(response: { status: number; payload: any }): ApiCheck {
 export async function GET(request: Request) {
   if (!(await getSession())) return NextResponse.json({ error: "Não autenticado." }, { status: 401 });
 
-  const accessToken = process.env.INSTAGRAM_ACCESS_TOKEN || process.env.META_ACCESS_TOKEN;
-  const configuredAccountId = process.env.INSTAGRAM_ACCOUNT_ID || null;
+  const accessToken = await getInstagramAccessToken();
+  const configuredAccountId = await getInstagramAccountId();
   const configured = {
     appSecret: Boolean(process.env.META_APP_SECRET || process.env.INSTAGRAM_APP_SECRET || process.env.FACEBOOK_APP_SECRET),
     verifyToken: Boolean(process.env.META_VERIFY_TOKEN),
