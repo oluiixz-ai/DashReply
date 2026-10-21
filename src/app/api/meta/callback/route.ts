@@ -24,7 +24,7 @@ export async function GET(request: Request) {
   const sessionSecret = process.env.SESSION_SECRET;
   const appSecret = process.env.INSTAGRAM_APP_SECRET;
   const appId = process.env.INSTAGRAM_APP_ID;
-  if (!sessionSecret || !appSecret || !db) return resultRedirect(request, "error", "A configuração do servidor está incompleta.");
+  if (!sessionSecret || !appSecret || !appId || !db) return resultRedirect(request, "error", "A configuração do servidor está incompleta.");
 
   try {
     const verified = await jwtVerify(state, new TextEncoder().encode(sessionSecret));
