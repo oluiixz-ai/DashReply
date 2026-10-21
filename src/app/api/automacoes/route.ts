@@ -39,6 +39,11 @@ export async function POST(request: Request) {
   const input = body as Record<string, unknown>;
   const nome = typeof input.nome === "string" ? input.nome.trim() : "";
   const palavraChave = typeof input.palavraChave === "string" ? input.palavraChave.trim() : "";
+  const respostaPublica = typeof input.respostaPublica === "string" ? input.respostaPublica.trim() : "";
+  const mensagemDirect = typeof input.mensagemDirect === "string" ? input.mensagemDirect.trim() : "";
+  if (respostaPublica.length > 1000 || mensagemDirect.length > 2000) {
+    return NextResponse.json({ error: "A resposta pública deve ter até 1.000 caracteres e a DM até 2.000." }, { status: 400 });
+  }
   if (!nome || nome.length > 160 || !palavraChave || palavraChave.length > 200) {
     return NextResponse.json({ error: "Informe nome e palavra-chave válidos." }, { status: 400 });
   }
@@ -48,6 +53,8 @@ export async function POST(request: Request) {
       palavraChave,
       tipoCorrespondencia: "contains",
       escopo: "all_posts",
+      respostaPublica: respostaPublica || null,
+      mensagemDirect: mensagemDirect || null,
       ativa: false,
     }).returning();
     return NextResponse.json({ automation: toClient(row) }, { status: 201 });
