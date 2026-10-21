@@ -22,8 +22,8 @@ export async function GET(request: Request) {
   if (!code || !state) return resultRedirect(request, "error", "A Meta não retornou o código de autorização esperado.");
 
   const sessionSecret = process.env.SESSION_SECRET;
-  const appSecret = process.env.META_APP_SECRET;
-  const appId = process.env.META_APP_ID || "993144227178687";
+  const appSecret = process.env.INSTAGRAM_APP_SECRET || process.env.META_APP_SECRET;
+  const appId = process.env.INSTAGRAM_APP_ID;
   if (!sessionSecret || !appSecret || !db) return resultRedirect(request, "error", "A configuração do servidor está incompleta.");
 
   try {
