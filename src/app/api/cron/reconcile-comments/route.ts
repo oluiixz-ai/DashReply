@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { automacoes, eventos } from "@/lib/db/schema";
 import { getInstagramAccessToken, getInstagramAccountId } from "@/lib/instagram-token";
+import { getInstagramAccessToken, getInstagramAccountId } from "@/lib/instagram-token";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
