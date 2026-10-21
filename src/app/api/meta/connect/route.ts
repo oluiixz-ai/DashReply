@@ -10,7 +10,7 @@ export async function GET(request: Request) {
   if (!session) return NextResponse.json({ error: "Faça login no DashReply primeiro." }, { status: 401 });
 
   const appId = process.env.INSTAGRAM_APP_ID;
-  const appSecret = process.env.INSTAGRAM_APP_SECRET || process.env.META_APP_SECRET;
+  const appSecret = process.env.INSTAGRAM_APP_SECRET;
   if (!appId || !appSecret) {
     return NextResponse.json({ error: "Configure o App ID específico do Instagram Login em INSTAGRAM_APP_ID e o segredo correspondente em INSTAGRAM_APP_SECRET na Vercel." }, { status: 503 });
   }
