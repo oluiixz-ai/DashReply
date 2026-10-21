@@ -11,6 +11,7 @@ export async function GET(request: Request) {
     appSecret: Boolean(process.env.META_APP_SECRET),
     verifyToken: Boolean(process.env.META_VERIFY_TOKEN),
     accessToken: Boolean(process.env.INSTAGRAM_ACCESS_TOKEN || process.env.META_ACCESS_TOKEN),
+    instagramAccountId: Boolean(process.env.INSTAGRAM_ACCOUNT_ID),
   };
 
   return NextResponse.json({
