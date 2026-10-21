@@ -5,7 +5,7 @@ import { Activity, ArrowDownRight, ArrowUpRight, Bell, Bot, ChevronDown, CircleH
 
 type Automation = { id: number; name: string; keyword: string; scope: string; status: "Ativa" | "Pausada"; replies: number; dms: number };
 const nav = [
-  { label: "Visão geral", icon: LayoutDashboard }, { label: "Automações", icon: Workflow }, { label: "Contatos", icon: Users }, { label: "Caixa de saída", icon: Send }, { label: "Atividade", icon: Activity },
+  { label: "Visão geral", icon: LayoutDashboard }, { label: "Automações", icon: Workflow }, { label: "Contatos", icon: Users }, { label: "Caixa de saída", icon: Send }, { label: "Eventos recebidos", icon: Activity }, { label: "Atividade", icon: Activity },
 ];
 
 export default function Home() {
@@ -23,6 +23,9 @@ export default function Home() {
   const [subscriptionLoading, setSubscriptionLoading] = useState<"check" | "subscribe" | null>(null);
   const [subscriptionResult, setSubscriptionResult] = useState<Record<string, unknown> | null>(null);
   const [subscriptionMessage, setSubscriptionMessage] = useState("");
+  const [events, setEvents] = useState<Array<{id:number;type:string;commentId:string|null;username:string;text:string;mediaId:string;status:string;error:string|null;createdAt:string}>>([]);
+  const [eventsLoading, setEventsLoading] = useState(false);
+  const [eventsError, setEventsError] = useState("");
   async function manageSubscriptions(action: "check" | "subscribe") {
     setSubscriptionLoading(action); setSubscriptionMessage(""); setSubscriptionResult(null);
     try {
@@ -75,6 +78,24 @@ export default function Home() {
     loadAutomations();
     return () => { cancelled = true; };
   }, []);
+
+  useEffect(() => {
+    if (active !== "Eventos recebidos") return;
+    let cancelled = false;
+    async function loadEvents() {
+      setEventsLoading(true); setEventsError("");
+      try {
+        const response = await fetch("/api/eventos", { cache: "no-store" });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || "Não foi possível carregar os eventos.");
+        if (!cancelled) setEvents(data.events ?? []);
+      } catch (error) {
+        if (!cancelled) setEventsError(error instanceof Error ? error.message : "Falha ao carregar eventos.");
+      } finally { if (!cancelled) setEventsLoading(false); }
+    }
+    loadEvents();
+    return () => { cancelled = true; };
+  }, [active]);
 
   const filtered = useMemo(() => automations.filter(a => `${a.name} ${a.keyword}`.toLowerCase().includes(search.toLowerCase())), [automations, search]);
 
@@ -135,6 +156,13 @@ export default function Home() {
       <div className="mx-auto max-w-[1400px] p-5 md:p-9">
         <div className="mb-8 flex flex-col justify-between gap-4 sm:flex-row sm:items-end"><div><div className="mb-2 flex items-center gap-2 text-xs text-zinc-500"><span className={`h-1.5 w-1.5 rounded-full ${loading ? "bg-amber-400" : "bg-emerald-400"}`}/>{loading ? "Sincronizando dados" : "Dados persistidos no Neon"}</div><h1 className="text-2xl font-semibold tracking-tight md:text-[30px]">{active === "Visão geral" ? "Visão geral" : active}</h1><p className="mt-2 text-sm text-zinc-400">Acompanhe suas conversas e transforme comentários em conexões.</p></div><button onClick={() => { setShowModal(true); setNotice(""); }} className="flex items-center justify-center gap-2 rounded-xl bg-violet-500 px-4 py-2.5 text-sm font-medium text-white shadow-lg shadow-violet-950/30 transition hover:bg-violet-400"><Plus size={17}/> Nova automação</button></div>
         {notice && <div className="mb-5 rounded-xl border border-violet-500/30 bg-violet-500/10 px-4 py-3 text-sm text-violet-200">{notice}</div>}
+        {active === "Eventos recebidos" && <section className="mb-7 rounded-2xl border border-zinc-800 bg-[#111114] p-5 md:p-7">
+          <div className="mb-5"><h2 className="text-base font-semibold">Eventos recebidos do Instagram</h2><p className="mt-1 text-sm text-zinc-400">Histórico dos webhooks que chegaram ao DashReply.</p></div>
+          {eventsError && <div className="mb-4 rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-200">{eventsError}</div>}
+          <div className="mb-4 flex justify-end"><button onClick={()=>setActive("Visão geral")} className="hidden">Recarregar</button><button onClick={()=>{setEventsError("");setEventsLoading(true);fetch("/api/eventos",{cache:"no-store"}).then(async r=>{const d=await r.json();if(!r.ok)throw new Error(d.error||"Falha ao carregar");setEvents(d.events??[])}).catch(e=>setEventsError(e instanceof Error?e.message:"Falha ao carregar")).finally(()=>setEventsLoading(false))}} className="rounded-xl border border-zinc-700 px-4 py-2 text-sm text-zinc-200 hover:bg-zinc-800">Atualizar</button></div>
+          {eventsLoading ? <p className="py-8 text-center text-sm text-zinc-400">Carregando eventos…</p> : events.length === 0 ? <div className="rounded-xl border border-dashed border-zinc-700 p-8 text-center"><Activity className="mx-auto mb-3 text-zinc-500" size={24}/><p className="text-sm font-medium text-zinc-200">Nenhum evento recebido ainda</p><p className="mt-2 text-xs leading-5 text-zinc-500">Comente “Quero” em uma publicação e volte aqui. Se nada aparecer, verificaremos os logs do webhook.</p></div> : <div className="overflow-x-auto"><table className="w-full min-w-[720px] text-left"><thead className="text-[10px] uppercase tracking-wider text-zinc-500"><tr><th className="px-3 py-3">Data</th><th className="px-3 py-3">Evento</th><th className="px-3 py-3">Usuário</th><th className="px-3 py-3">Conteúdo</th><th className="px-3 py-3">Status</th><th className="px-3 py-3">ID comentário</th></tr></thead><tbody className="divide-y divide-zinc-800">{events.map(ev=><tr key={ev.id} className="align-top"><td className="whitespace-nowrap px-3 py-3 text-xs text-zinc-400">{new Date(ev.createdAt).toLocaleString("pt-BR")}</td><td className="px-3 py-3 text-xs text-zinc-300">{ev.type}</td><td className="px-3 py-3 text-xs text-zinc-300">{ev.username ? "@"+ev.username : "—"}</td><td className="max-w-[260px] px-3 py-3 text-xs text-zinc-300 break-words">{ev.text || "Sem texto no payload"}</td><td className="px-3 py-3"><span className="rounded-md bg-zinc-800 px-2 py-1 text-[10px] text-zinc-300">{ev.status}</span></td><td className="max-w-[160px] break-all px-3 py-3 text-[10px] text-zinc-500">{ev.commentId || "—"}</td></tr>)}</tbody></table></div>}
+          <p className="mt-4 text-[11px] text-zinc-500">Mostrando até 100 eventos recentes. O sistema está em modo de teste e não envia respostas automáticas.</p>
+        </section>}
         {active === "Configurações" && <section className="mb-7 rounded-2xl border border-zinc-800 bg-[#111114] p-5 md:p-7"><h2 className="mb-2 text-base font-semibold">Integração oficial do Instagram</h2><p className="mb-4 text-sm leading-6 text-zinc-400">Conecte sua conta profissional pelo fluxo oficial da Meta. O token recebido é guardado no banco e nunca exibido na tela.</p><a href="/api/meta/connect" className="mb-5 inline-flex items-center gap-2 rounded-xl bg-violet-500 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-violet-400"><Instagram size={16}/> Conectar conta do Instagram <ExternalLink size={14}/></a><div className="mb-5 grid gap-3 sm:grid-cols-2">{[{label:"META_APP_SECRET",ok:metaStatus?.appSecret},{label:"META_VERIFY_TOKEN",ok:metaStatus?.verifyToken},{label:"META_ACCESS_TOKEN",ok:metaStatus?.accessToken},{label:"INSTAGRAM_ACCOUNT_ID",ok:metaStatus?.instagramAccountId}].map(item=><div key={item.label} className="flex items-center justify-between rounded-xl border border-zinc-800 bg-zinc-950/70 px-4 py-3"><code className="text-xs text-zinc-300">{item.label}</code><span className={item.ok ? "text-xs text-emerald-300" : "text-xs text-amber-300"}>{metaStatus ? (item.ok ? "Configurado" : "Pendente") : "Verificando…"}</span></div>)}</div><div className="mb-4 rounded-xl border border-zinc-800 bg-zinc-950/70 p-4"><div className="mb-1 text-xs text-zinc-500">URL do webhook</div><code className="break-all text-xs text-violet-200">{metaStatus?.webhookUrl ?? "https://dash-reply-2der.vercel.app/api/webhook/instagram"}</code></div><div className="mb-4 rounded-xl border border-amber-500/20 bg-amber-500/5 p-4 text-xs leading-5 text-amber-200/90">A recepção e o envio reais ainda dependem de configurar e validar as permissões da API Graph da Meta.</div><div className="flex flex-wrap gap-3"><button onClick={()=>window.open("https://developers.facebook.com/apps/","_blank","noopener,noreferrer")} className="rounded-xl bg-violet-500 px-4 py-2.5 text-sm text-white">Abrir Meta for Developers ↗</button><button onClick={()=>window.open("https://vercel.com/oluiixz-3231/dash-reply-2der/settings/environment-variables","_blank","noopener,noreferrer")} className="rounded-xl border border-zinc-700 px-4 py-2.5 text-sm text-zinc-300">Variáveis da Vercel ↗</button></div><div className="mt-6 border-t border-zinc-800 pt-5"><h3 className="mb-2 text-sm font-semibold">Inscrição dos webhooks</h3><p className="mb-4 text-xs leading-5 text-zinc-400">Confira se a conta do Instagram está inscrita para enviar eventos ao DashReply. Isso não envia respostas nem mensagens.</p><div className="flex flex-wrap gap-3"><button disabled={subscriptionLoading!==null} onClick={()=>manageSubscriptions("check")} className="rounded-xl border border-zinc-700 px-4 py-2.5 text-sm text-zinc-200 disabled:opacity-50">{subscriptionLoading==="check"?"Consultando...":"Verificar inscrição"}</button><button disabled={subscriptionLoading!==null} onClick={()=>manageSubscriptions("subscribe")} className="rounded-xl bg-fuchsia-600 px-4 py-2.5 text-sm text-white disabled:opacity-50">{subscriptionLoading==="subscribe"?"Ativando...":"Ativar webhooks"}</button></div>{subscriptionMessage && <p role="status" className="mt-4 rounded-xl border border-zinc-700 p-3 text-sm text-zinc-200">{subscriptionMessage}</p>}{subscriptionResult && <pre className="mt-3 max-h-80 overflow-auto whitespace-pre-wrap break-words rounded-xl bg-black/40 p-4 text-xs text-zinc-300">{JSON.stringify(subscriptionResult,null,2)}</pre>}</div></section>}
         <div className="mb-7 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
           {[{label:"Automações criadas",value:String(automations.length).padStart(2,"0"),change:`${automations.filter(a=>a.status === "Ativa").length} ativas`,icon:Workflow,up:true},{label:"Respostas públicas",value:"—",change:"aguardando integração Meta",icon:MessageCircle,up:true},{label:"Mensagens enviadas",value:"—",change:"aguardando integração Meta",icon:Send,up:true},{label:"Contatos alcançados",value:"0",change:"aguardando eventos reais",icon:Users,up:true}].map((k) => { const Icon = k.icon; return <div key={k.label} className="rounded-2xl border border-zinc-800/90 bg-[#111114] p-5"><div className="mb-5 flex items-center justify-between"><span className="text-xs text-zinc-400">{k.label}</span><div className="rounded-lg bg-zinc-800/70 p-2 text-zinc-400"><Icon size={16}/></div></div><div className="mb-2 text-[28px] font-semibold tracking-tight">{k.value}</div><div className="flex items-center gap-1.5 text-[11px] text-zinc-500"><span className="flex items-center gap-1 text-emerald-400"><ArrowUpRight size={13}/>{k.label === "Automações criadas" ? k.change : ""}</span>{k.label !== "Automações criadas" && k.change}</div></div> })}
