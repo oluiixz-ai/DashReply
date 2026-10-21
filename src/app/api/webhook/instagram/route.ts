@@ -1,8 +1,9 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
-import { eq } from "drizzle-orm";
+import { desc, eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { automacoes, eventos } from "@/lib/db/schema";
+import { getInstagramAccessToken, getInstagramAccountId } from "@/lib/instagram-token";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -27,12 +28,20 @@ export async function GET(request: Request) {
   return NextResponse.json({ error: "Verificação do webhook inválida." }, { status: 403 });
 }
 
+async function graphPost(path: string, token: string, payload: Record<string, unknown>) {
+  const response = await fetch(`https://graph.instagram.com/v26.0/${path}`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+    cache: "no-store",
+  });
+  const body = await response.json().catch(() => ({}));
+  return { ok: response.ok && !body?.error, status: response.status, body };
+}
+
 export async function POST(request: Request) {
   const raw = await request.text();
   const signature = request.headers.get("x-hub-signature-256");
-
-  // Instagram Login and Facebook Login integrations may use different secret
-  // environment variable names. Try configured secrets without logging values.
   const secrets = [
     { label: "META_APP_SECRET", value: process.env.META_APP_SECRET },
     { label: "INSTAGRAM_APP_SECRET", value: process.env.INSTAGRAM_APP_SECRET },
@@ -51,8 +60,7 @@ export async function POST(request: Request) {
   const matchedSecret = secrets.find(({ value }) => {
     const expected = "sha256=" + createHmac("sha256", value).update(raw).digest("hex");
     const expectedBuffer = Buffer.from(expected);
-    return receivedBuffer.length === expectedBuffer.length &&
-      timingSafeEqual(receivedBuffer, expectedBuffer);
+    return receivedBuffer.length === expectedBuffer.length && timingSafeEqual(receivedBuffer, expectedBuffer);
   });
 
   if (!matchedSecret) {
@@ -67,7 +75,6 @@ export async function POST(request: Request) {
   try {
     body = JSON.parse(raw);
   } catch {
-    console.warn("Instagram webhook rejected: invalid JSON");
     return NextResponse.json({ error: "JSON inválido." }, { status: 400 });
   }
 
@@ -95,6 +102,8 @@ export async function POST(request: Request) {
 
   let recorded = 0;
   let matched = 0;
+  let sent = 0;
+  const sendingEnabled = process.env.INSTAGRAM_AUTOMATIONS_SEND_ENABLED === "true";
 
   for (const item of changes) {
     const value = item.value;
@@ -121,10 +130,11 @@ export async function POST(request: Request) {
       }
       recorded += 1;
 
-      // Dry-run only: do not reply publicly or send DMs at this stage.
-      if (item.field !== "comments" || !textValue) continue;
+      if (item.field !== "comments" || !textValue || !commentId) continue;
 
-      const activeRules = await db.select().from(automacoes).where(eq(automacoes.ativa, true));
+      // Newest active rule wins if multiple rules use the same keyword.
+      const activeRules = await db.select().from(automacoes)
+        .where(eq(automacoes.ativa, true)).orderBy(desc(automacoes.id));
       const normalizedText = textValue.toLocaleLowerCase("pt-BR");
       const rule = activeRules.find((candidate) => {
         const keyword = candidate.palavraChave.trim().toLocaleLowerCase("pt-BR");
@@ -142,14 +152,61 @@ export async function POST(request: Request) {
         continue;
       }
 
+      matched += 1;
+      const publicText = rule.respostaPublica?.trim();
+      const directText = rule.mensagemDirect?.trim();
+      if (!sendingEnabled || (!publicText && !directText)) {
+        await db.update(eventos).set({
+          automacaoId: rule.id,
+          status: "matched_dry_run",
+        }).where(eq(eventos.id, inserted.id));
+        console.info("Instagram comment matched automation in dry-run", {
+          commentId, automationId: rule.id, sendingEnabled, hasPublicReply: Boolean(publicText), hasPrivateReply: Boolean(directText),
+        });
+        continue;
+      }
+
+      const accessToken = await getInstagramAccessToken();
+      const accountId = await getInstagramAccountId();
+      if (!accessToken || !accountId) {
+        await db.update(eventos).set({
+          automacaoId: rule.id,
+          status: "send_failed",
+          erro: "Token de acesso ou ID da conta do Instagram não configurado.",
+        }).where(eq(eventos.id, inserted.id));
+        continue;
+      }
+
+      const failures: string[] = [];
+      let sentAny = false;
+
+      // Public comment reply. This is independent of the private reply.
+      if (publicText) {
+        const result = await graphPost(`${encodeURIComponent(commentId)}/replies`, accessToken, { message: publicText });
+        if (result.ok) sentAny = true;
+        else failures.push(`Resposta pública HTTP ${result.status}: ${String(result.body?.error?.message ?? "erro da API")}`);
+      }
+
+      // Instagram Private Replies: one private reply per comment, using comment_id as recipient.
+      if (directText) {
+        const result = await graphPost(`${encodeURIComponent(accountId)}/messages`, accessToken, {
+          recipient: { comment_id: commentId },
+          message: { text: directText },
+        });
+        if (result.ok) sentAny = true;
+        else failures.push(`DM privada HTTP ${result.status}: ${String(result.body?.error?.message ?? "erro da API")}`);
+      }
+
+      const finalStatus = failures.length ? (sentAny ? "partially_sent" : "send_failed") : "sent";
       await db.update(eventos).set({
         automacaoId: rule.id,
-        status: "matched_dry_run",
+        status: finalStatus,
+        erro: failures.length ? failures.join(" | ").slice(0, 4000) : null,
       }).where(eq(eventos.id, inserted.id));
-      matched += 1;
-      console.info("Instagram comment matched automation in dry-run", {
-        commentId,
-        automationId: rule.id,
+      if (sentAny) sent += 1;
+      console.info("Instagram automation delivery result", {
+        commentId, automationId: rule.id, status: finalStatus,
+        publicReplyConfigured: Boolean(publicText), privateReplyConfigured: Boolean(directText),
       });
     } catch (error) {
       console.error("Falha ao processar evento do Instagram", {
@@ -163,7 +220,8 @@ export async function POST(request: Request) {
     received: true,
     recorded,
     matched,
+    sent,
+    sendingEnabled,
     fields: changes.map((item: any) => item.field),
-    sendingEnabled: false,
   });
 }
