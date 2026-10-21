@@ -1,34 +1,83 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Activity, ArrowDownRight, ArrowUpRight, Bell, Bot, ChevronDown, CircleHelp, Command, ExternalLink, Instagram, LayoutDashboard, LifeBuoy, MessageCircle, MoreHorizontal, Plus, Search, Send, Settings2, ShieldCheck, Sparkles, Users, Workflow, Zap } from "lucide-react";
 
 type Automation = { id: number; name: string; keyword: string; scope: string; status: "Ativa" | "Pausada"; replies: number; dms: number };
-const initialAutomations: Automation[] = [
-  { id: 1, name: "Comentou QUERO", keyword: "quero", scope: "Todas as publicações", status: "Ativa", replies: 128, dms: 96 },
-  { id: 2, name: "Pedir link do catálogo", keyword: "link", scope: "Reels selecionados", status: "Ativa", replies: 74, dms: 63 },
-  { id: 3, name: "Enviar boas-vindas", keyword: "oi, olá", scope: "Todas as publicações", status: "Pausada", replies: 32, dms: 28 },
-];
 const nav = [
   { label: "Visão geral", icon: LayoutDashboard }, { label: "Automações", icon: Workflow }, { label: "Contatos", icon: Users }, { label: "Caixa de saída", icon: Send }, { label: "Atividade", icon: Activity },
 ];
 
 export default function Home() {
   const [active, setActive] = useState("Visão geral");
-  const [automations, setAutomations] = useState(initialAutomations);
+  const [automations, setAutomations] = useState<Automation[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
   const [showModal, setShowModal] = useState(false);
   const [name, setName] = useState("");
   const [keyword, setKeyword] = useState("");
   const [search, setSearch] = useState("");
   const [notice, setNotice] = useState("");
+  useEffect(() => {
+    let cancelled = false;
+    async function loadAutomations() {
+      try {
+        const response = await fetch("/api/automacoes", { cache: "no-store" });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || "Não foi possível carregar as automações.");
+        if (!cancelled) setAutomations(data.automations ?? []);
+      } catch (error) {
+        if (!cancelled) setNotice(error instanceof Error ? error.message : "Erro ao carregar automações.");
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+    loadAutomations();
+    return () => { cancelled = true; };
+  }, []);
+
   const filtered = useMemo(() => automations.filter(a => `${a.name} ${a.keyword}`.toLowerCase().includes(search.toLowerCase())), [automations, search]);
 
-  function createAutomation(e: React.FormEvent<HTMLFormElement>) {
+  async function createAutomation(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    if (!name.trim() || !keyword.trim()) return;
-    setAutomations(prev => [{ id: Date.now(), name: name.trim(), keyword: keyword.trim(), scope: "Todas as publicações", status: "Pausada", replies: 0, dms: 0 }, ...prev]);
-    setName(""); setKeyword(""); setShowModal(false); setActive("Automações");
-    setNotice("Automação criada como rascunho. Conecte a API oficial da Meta para ativar envios reais.");
+    if (!name.trim() || !keyword.trim() || saving) return;
+    setSaving(true);
+    setNotice("");
+    try {
+      const response = await fetch("/api/automacoes", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ nome: name.trim(), palavraChave: keyword.trim() }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Não foi possível salvar a automação.");
+      setAutomations(prev => [data.automation, ...prev]);
+      setName(""); setKeyword(""); setShowModal(false); setActive("Automações");
+      setNotice("Automação salva no banco de dados como rascunho. Configure a integração oficial da Meta antes de ativar envios reais.");
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "Erro ao salvar automação.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function toggleAutomation(automation: Automation) {
+    const ativa = automation.status !== "Ativa";
+    const previous = automations;
+    setAutomations(items => items.map(item => item.id === automation.id ? { ...item, status: ativa ? "Ativa" : "Pausada" } : item));
+    try {
+      const response = await fetch(`/api/automacoes/${automation.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ativa }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Não foi possível atualizar a automação.");
+      setNotice(ativa ? "Automação ativada no banco. Os envios reais dependem da integração Meta." : "Automação pausada e alteração salva.");
+    } catch (error) {
+      setAutomations(previous);
+      setNotice(error instanceof Error ? error.message : "Erro ao atualizar automação.");
+    }
   }
 
   return <main className="min-h-screen md:flex">
@@ -44,22 +93,22 @@ export default function Home() {
     <section className="min-w-0 flex-1">
       <header className="flex h-[68px] items-center justify-between border-b border-zinc-800/80 px-5 md:px-9"><div className="flex items-center gap-2 text-xs text-zinc-500"><span>Workspace</span><span>/</span><span className="text-zinc-200">{active}</span></div><div className="flex items-center gap-3"><button aria-label="Ajuda" className="hidden rounded-lg p-2 text-zinc-500 hover:bg-zinc-800 sm:block"><CircleHelp size={17}/></button><button aria-label="Notificações" className="relative rounded-lg p-2 text-zinc-400 hover:bg-zinc-800"><Bell size={17}/><span className="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full bg-violet-400"/></button><div className="h-7 border-l border-zinc-800"/><div className="flex items-center gap-2 rounded-lg border border-zinc-800 px-2.5 py-1.5"><div className="flex h-6 w-6 items-center justify-center rounded-md bg-gradient-to-br from-fuchsia-500 to-orange-400"><Instagram size={14}/></div><span className="hidden text-xs text-zinc-300 sm:block">Conta Instagram</span><ChevronDown size={14} className="text-zinc-500"/></div></div></header>
       <div className="mx-auto max-w-[1400px] p-5 md:p-9">
-        <div className="mb-8 flex flex-col justify-between gap-4 sm:flex-row sm:items-end"><div><div className="mb-2 flex items-center gap-2 text-xs text-zinc-500"><span className="h-1.5 w-1.5 rounded-full bg-amber-400"/> Ambiente de demonstração</div><h1 className="text-2xl font-semibold tracking-tight md:text-[30px]">{active === "Visão geral" ? "Visão geral" : active}</h1><p className="mt-2 text-sm text-zinc-400">Acompanhe suas conversas e transforme comentários em conexões.</p></div><button onClick={() => { setShowModal(true); setNotice(""); }} className="flex items-center justify-center gap-2 rounded-xl bg-violet-500 px-4 py-2.5 text-sm font-medium text-white shadow-lg shadow-violet-950/30 transition hover:bg-violet-400"><Plus size={17}/> Nova automação</button></div>
+        <div className="mb-8 flex flex-col justify-between gap-4 sm:flex-row sm:items-end"><div><div className="mb-2 flex items-center gap-2 text-xs text-zinc-500"><span className={`h-1.5 w-1.5 rounded-full ${loading ? "bg-amber-400" : "bg-emerald-400"}`}/>{loading ? "Sincronizando dados" : "Dados persistidos no Neon"}</div><h1 className="text-2xl font-semibold tracking-tight md:text-[30px]">{active === "Visão geral" ? "Visão geral" : active}</h1><p className="mt-2 text-sm text-zinc-400">Acompanhe suas conversas e transforme comentários em conexões.</p></div><button onClick={() => { setShowModal(true); setNotice(""); }} className="flex items-center justify-center gap-2 rounded-xl bg-violet-500 px-4 py-2.5 text-sm font-medium text-white shadow-lg shadow-violet-950/30 transition hover:bg-violet-400"><Plus size={17}/> Nova automação</button></div>
         {notice && <div className="mb-5 rounded-xl border border-violet-500/30 bg-violet-500/10 px-4 py-3 text-sm text-violet-200">{notice}</div>}
         <div className="mb-7 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-          {[{label:"Automações criadas",value:String(automations.length).padStart(2,"0"),change:"2 ativas",icon:Workflow,up:true},{label:"Respostas públicas",value:automations.reduce((n,a)=>n+a.replies,0).toLocaleString("pt-BR"),change:"dados de demonstração",icon:MessageCircle,up:true},{label:"Mensagens enviadas",value:automations.reduce((n,a)=>n+a.dms,0).toLocaleString("pt-BR"),change:"dados de demonstração",icon:Send,up:true},{label:"Contatos alcançados",value:"186",change:"dados de demonstração",icon:Users,up:true}].map((k) => { const Icon = k.icon; return <div key={k.label} className="rounded-2xl border border-zinc-800/90 bg-[#111114] p-5"><div className="mb-5 flex items-center justify-between"><span className="text-xs text-zinc-400">{k.label}</span><div className="rounded-lg bg-zinc-800/70 p-2 text-zinc-400"><Icon size={16}/></div></div><div className="mb-2 text-[28px] font-semibold tracking-tight">{k.value}</div><div className="flex items-center gap-1.5 text-[11px] text-zinc-500"><span className="flex items-center gap-1 text-emerald-400"><ArrowUpRight size={13}/>{k.change === "2 ativas" ? k.change : ""}</span>{k.change !== "2 ativas" && k.change}</div></div> })}
+          {[{label:"Automações criadas",value:String(automations.length).padStart(2,"0"),change:"2 ativas",icon:Workflow,up:true},{label:"Respostas públicas",value:automations.reduce((n,a)=>n+a.replies,0).toLocaleString("pt-BR"),change:"dados de demonstração",icon:MessageCircle,up:true},{label:"Mensagens enviadas",value:automations.reduce((n,a)=>n+a.dms,0).toLocaleString("pt-BR"),change:"dados de demonstração",icon:Send,up:true},{label:"Contatos alcançados",value:"0",change:"aguardando eventos reais",icon:Users,up:true}].map((k) => { const Icon = k.icon; return <div key={k.label} className="rounded-2xl border border-zinc-800/90 bg-[#111114] p-5"><div className="mb-5 flex items-center justify-between"><span className="text-xs text-zinc-400">{k.label}</span><div className="rounded-lg bg-zinc-800/70 p-2 text-zinc-400"><Icon size={16}/></div></div><div className="mb-2 text-[28px] font-semibold tracking-tight">{k.value}</div><div className="flex items-center gap-1.5 text-[11px] text-zinc-500"><span className="flex items-center gap-1 text-emerald-400"><ArrowUpRight size={13}/>{k.change === "2 ativas" ? k.change : ""}</span>{k.change !== "2 ativas" && k.change}</div></div> })}
         </div>
         <div className="mb-7 grid gap-4 xl:grid-cols-[1.6fr_1fr]">
           <div className="rounded-2xl border border-zinc-800/90 bg-[#111114] p-5 md:p-6"><div className="mb-1 flex items-center justify-between"><h2 className="text-sm font-semibold">Atividade das automações</h2><button className="flex items-center gap-1 rounded-lg border border-zinc-800 px-2.5 py-1.5 text-[11px] text-zinc-400">Últimos 7 dias <ChevronDown size={13}/></button></div><p className="mb-5 text-xs text-zinc-500">Visão ilustrativa de respostas e mensagens</p><div className="flex h-[155px] items-end gap-3 border-b border-zinc-800 pb-2 sm:gap-5">{[{d:"Seg",a:40,b:20},{d:"Ter",a:65,b:35},{d:"Qua",a:50,b:29},{d:"Qui",a:82,b:42},{d:"Sex",a:60,b:38},{d:"Sáb",a:93,b:55},{d:"Dom",a:72,b:45}].map(v=><div key={v.d} className="flex h-full flex-1 flex-col items-center justify-end gap-2"><div className="flex h-[125px] w-full items-end justify-center gap-1"><div style={{height:`${v.a}%`}} className="w-[35%] rounded-t-sm bg-violet-500/80"/><div style={{height:`${v.b}%`}} className="w-[35%] rounded-t-sm bg-fuchsia-400/50"/></div><span className="text-[10px] text-zinc-500">{v.d}</span></div>)}</div><div className="mt-4 flex gap-5 text-[11px] text-zinc-400"><span className="flex items-center gap-2"><span className="h-2 w-2 rounded-sm bg-violet-500"/>Respostas públicas</span><span className="flex items-center gap-2"><span className="h-2 w-2 rounded-sm bg-fuchsia-400/70"/>Mensagens diretas</span></div></div>
           <div className="relative overflow-hidden rounded-2xl border border-violet-500/20 bg-gradient-to-br from-violet-950/60 via-[#171321] to-[#111114] p-6"><div className="absolute -right-8 -top-8 h-36 w-36 rounded-full bg-violet-500/10 blur-3xl"/><div className="relative"><div className="mb-5 flex h-10 w-10 items-center justify-center rounded-xl border border-violet-400/20 bg-violet-400/10 text-violet-200"><Sparkles size={20}/></div><div className="mb-2 text-xs font-medium text-violet-300">DICA RÁPIDA</div><h2 className="mb-2 text-lg font-semibold">Conversa que começa no comentário</h2><p className="mb-5 text-sm leading-6 text-zinc-400">Configure palavras-chave para responder publicamente e continuar a conversa na DM, de forma organizada.</p><button onClick={() => setShowModal(true)} className="flex items-center gap-2 text-sm font-medium text-violet-200 hover:text-white">Criar minha primeira regra <ArrowUpRight size={15}/></button></div></div>
         </div>
         <div className="overflow-hidden rounded-2xl border border-zinc-800/90 bg-[#111114]"><div className="flex flex-col justify-between gap-3 border-b border-zinc-800 p-5 sm:flex-row sm:items-center"><div><h2 className="text-sm font-semibold">Suas automações</h2><p className="mt-1 text-xs text-zinc-500">Gerencie as regras de resposta do Instagram</p></div><div className="relative"><Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500"/><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Buscar automação..." className="w-full rounded-lg border border-zinc-800 bg-zinc-950 py-2 pl-9 pr-3 text-xs outline-none placeholder:text-zinc-600 focus:border-violet-500 sm:w-56"/></div></div>
-          <div className="overflow-x-auto"><table className="w-full min-w-[700px] text-left"><thead className="bg-zinc-900/40 text-[10px] uppercase tracking-wider text-zinc-500"><tr><th className="px-5 py-3 font-medium">Nome da automação</th><th className="px-4 py-3 font-medium">Palavra-chave</th><th className="px-4 py-3 font-medium">Escopo</th><th className="px-4 py-3 font-medium">Status</th><th className="px-4 py-3 font-medium">Resultados</th><th className="px-4 py-3"/></tr></thead><tbody className="divide-y divide-zinc-800/80">{filtered.map(a=><tr key={a.id} className="transition hover:bg-zinc-900/40"><td className="px-5 py-4"><div className="flex items-center gap-3"><div className="flex h-9 w-9 items-center justify-center rounded-xl border border-zinc-800 bg-zinc-900 text-violet-300"><Bot size={17}/></div><div><div className="text-xs font-medium text-zinc-200">{a.name}</div><div className="mt-1 text-[10px] text-zinc-500">Comentário → DM</div></div></div></td><td className="px-4 py-4"><span className="rounded-md border border-zinc-700 bg-zinc-900 px-2 py-1 text-[11px] text-zinc-300">{a.keyword}</span></td><td className="px-4 py-4 text-xs text-zinc-400">{a.scope}</td><td className="px-4 py-4"><span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[10px] ${a.status === "Ativa" ? "bg-emerald-500/10 text-emerald-300" : "bg-zinc-800 text-zinc-400"}`}><span className={`h-1.5 w-1.5 rounded-full ${a.status === "Ativa" ? "bg-emerald-400" : "bg-zinc-500"}`}/>{a.status}</span></td><td className="px-4 py-4 text-xs text-zinc-400">{a.replies} respostas <span className="text-zinc-600">/</span> {a.dms} DMs</td><td className="px-4 py-4"><button aria-label={`Alternar ${a.name}`} onClick={()=>setAutomations(prev=>prev.map(x=>x.id===a.id?{...x,status:x.status==="Ativa"?"Pausada":"Ativa"}:x))} className="rounded-lg p-2 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-200"><MoreHorizontal size={17}/></button></td></tr>)}</tbody></table>{filtered.length===0&&<div className="p-8 text-center text-sm text-zinc-500">Nenhuma automação encontrada.</div>}</div>
-          <div className="flex items-center justify-between border-t border-zinc-800 px-5 py-3 text-[11px] text-zinc-500"><span>Exibindo {filtered.length} de {automations.length} automações</span><span className="flex items-center gap-1"><ShieldCheck size={13}/> Dados demonstrativos</span></div>
+          <div className="overflow-x-auto"><table className="w-full min-w-[700px] text-left"><thead className="bg-zinc-900/40 text-[10px] uppercase tracking-wider text-zinc-500"><tr><th className="px-5 py-3 font-medium">Nome da automação</th><th className="px-4 py-3 font-medium">Palavra-chave</th><th className="px-4 py-3 font-medium">Escopo</th><th className="px-4 py-3 font-medium">Status</th><th className="px-4 py-3 font-medium">Resultados</th><th className="px-4 py-3"/></tr></thead><tbody className="divide-y divide-zinc-800/80">{filtered.map(a=><tr key={a.id} className="transition hover:bg-zinc-900/40"><td className="px-5 py-4"><div className="flex items-center gap-3"><div className="flex h-9 w-9 items-center justify-center rounded-xl border border-zinc-800 bg-zinc-900 text-violet-300"><Bot size={17}/></div><div><div className="text-xs font-medium text-zinc-200">{a.name}</div><div className="mt-1 text-[10px] text-zinc-500">Comentário → DM</div></div></div></td><td className="px-4 py-4"><span className="rounded-md border border-zinc-700 bg-zinc-900 px-2 py-1 text-[11px] text-zinc-300">{a.keyword}</span></td><td className="px-4 py-4 text-xs text-zinc-400">{a.scope}</td><td className="px-4 py-4"><span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[10px] ${a.status === "Ativa" ? "bg-emerald-500/10 text-emerald-300" : "bg-zinc-800 text-zinc-400"}`}><span className={`h-1.5 w-1.5 rounded-full ${a.status === "Ativa" ? "bg-emerald-400" : "bg-zinc-500"}`}/>{a.status}</span></td><td className="px-4 py-4 text-xs text-zinc-400">{a.replies} respostas <span className="text-zinc-600">/</span> {a.dms} DMs</td><td className="px-4 py-4"><button aria-label={`Alternar ${a.name}`} onClick={()=>toggleAutomation(a)} className="rounded-lg p-2 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-200"><MoreHorizontal size={17}/></button></td></tr>)}</tbody></table>{filtered.length===0&&<div className="p-8 text-center text-sm text-zinc-500">{loading ? "Carregando automações..." : "Nenhuma automação salva ainda."}</div>}</div>
+          <div className="flex items-center justify-between border-t border-zinc-800 px-5 py-3 text-[11px] text-zinc-500"><span>Exibindo {filtered.length} de {automations.length} automações</span><span className="flex items-center gap-1"><ShieldCheck size={13}/>{loading ? "Carregando do banco..." : "Sincronizado com o banco"}</span></div>
         </div>
         <footer className="flex flex-col gap-2 py-6 text-[11px] text-zinc-600 sm:flex-row sm:items-center sm:justify-between"><span>DashReply © 2026 · Feito para simplificar suas conversas.</span><span className="flex items-center gap-4"><button className="hover:text-zinc-300">Documentação</button><button className="hover:text-zinc-300">Suporte</button><button className="hover:text-zinc-300"><ExternalLink size={12} className="inline"/> Status da API</button></span></footer>
       </div>
     </section>
-    {showModal && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm"><div className="w-full max-w-md rounded-2xl border border-zinc-700 bg-[#121215] p-6 shadow-2xl"><div className="mb-5 flex items-start justify-between"><div><div className="mb-2 flex h-9 w-9 items-center justify-center rounded-xl bg-violet-500/15 text-violet-300"><Workflow size={18}/></div><h2 className="text-lg font-semibold">Nova automação</h2><p className="mt-1 text-xs text-zinc-400">Crie um rascunho de regra para comentários.</p></div><button onClick={()=>setShowModal(false)} className="rounded-lg px-2 py-1 text-zinc-500 hover:bg-zinc-800">✕</button></div><form onSubmit={createAutomation} className="space-y-4"><label className="block"><span className="mb-2 block text-xs font-medium text-zinc-300">Nome da automação</span><input value={name} onChange={e=>setName(e.target.value)} required placeholder="Ex.: Enviar catálogo no direct" className="w-full rounded-xl border border-zinc-700 bg-zinc-950 px-3 py-2.5 text-sm outline-none focus:border-violet-500"/></label><label className="block"><span className="mb-2 block text-xs font-medium text-zinc-300">Palavra-chave do comentário</span><input value={keyword} onChange={e=>setKeyword(e.target.value)} required placeholder="Ex.: quero" className="w-full rounded-xl border border-zinc-700 bg-zinc-950 px-3 py-2.5 text-sm outline-none focus:border-violet-500"/></label><div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-3 text-xs leading-5 text-amber-200/80">Este formulário cria apenas um rascunho local. O envio real exige configuração e aprovação da integração oficial da Meta.</div><div className="flex gap-3 pt-1"><button type="button" onClick={()=>setShowModal(false)} className="flex-1 rounded-xl border border-zinc-700 px-4 py-2.5 text-sm text-zinc-300 hover:bg-zinc-800">Cancelar</button><button type="submit" className="flex-1 rounded-xl bg-violet-500 px-4 py-2.5 text-sm font-medium text-white hover:bg-violet-400">Criar rascunho</button></div></form></div></div>}
+    {showModal && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm"><div className="w-full max-w-md rounded-2xl border border-zinc-700 bg-[#121215] p-6 shadow-2xl"><div className="mb-5 flex items-start justify-between"><div><div className="mb-2 flex h-9 w-9 items-center justify-center rounded-xl bg-violet-500/15 text-violet-300"><Workflow size={18}/></div><h2 className="text-lg font-semibold">Nova automação</h2><p className="mt-1 text-xs text-zinc-400">Crie um rascunho de regra para comentários.</p></div><button onClick={()=>setShowModal(false)} className="rounded-lg px-2 py-1 text-zinc-500 hover:bg-zinc-800">✕</button></div><form onSubmit={createAutomation} className="space-y-4"><label className="block"><span className="mb-2 block text-xs font-medium text-zinc-300">Nome da automação</span><input value={name} onChange={e=>setName(e.target.value)} required placeholder="Ex.: Enviar catálogo no direct" className="w-full rounded-xl border border-zinc-700 bg-zinc-950 px-3 py-2.5 text-sm outline-none focus:border-violet-500"/></label><label className="block"><span className="mb-2 block text-xs font-medium text-zinc-300">Palavra-chave do comentário</span><input value={keyword} onChange={e=>setKeyword(e.target.value)} required placeholder="Ex.: quero" className="w-full rounded-xl border border-zinc-700 bg-zinc-950 px-3 py-2.5 text-sm outline-none focus:border-violet-500"/></label><div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-3 text-xs leading-5 text-amber-200/80">A regra será salva no banco como rascunho. O envio real exige configuração e aprovação da integração oficial da Meta.</div><div className="flex gap-3 pt-1"><button type="button" onClick={()=>setShowModal(false)} className="flex-1 rounded-xl border border-zinc-700 px-4 py-2.5 text-sm text-zinc-300 hover:bg-zinc-800">Cancelar</button><button type="submit" disabled={saving} className="flex-1 rounded-xl bg-violet-500 px-4 py-2.5 text-sm font-medium text-white hover:bg-violet-400 disabled:cursor-not-allowed disabled:opacity-60">{saving ? "Salvando..." : "Criar rascunho"}</button></div></form></div></div>}
   </main>;
 }
