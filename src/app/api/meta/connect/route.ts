@@ -9,10 +9,10 @@ export async function GET(request: Request) {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: "Faça login no DashReply primeiro." }, { status: 401 });
 
-  const appId = process.env.META_APP_ID || "993144227178687";
-  const appSecret = process.env.META_APP_SECRET;
+  const appId = process.env.INSTAGRAM_APP_ID;
+  const appSecret = process.env.INSTAGRAM_APP_SECRET || process.env.META_APP_SECRET;
   if (!appId || !appSecret) {
-    return NextResponse.json({ error: "Configure META_APP_ID e META_APP_SECRET nas variáveis da Vercel." }, { status: 503 });
+    return NextResponse.json({ error: "Configure o App ID específico do Instagram Login em INSTAGRAM_APP_ID e o segredo correspondente em INSTAGRAM_APP_SECRET na Vercel." }, { status: 503 });
   }
 
   const secret = process.env.SESSION_SECRET;
@@ -29,6 +29,7 @@ export async function GET(request: Request) {
   url.searchParams.set("scope", "instagram_business_basic,instagram_business_manage_comments,instagram_business_manage_messages");
   url.searchParams.set("state", state);
   url.searchParams.set("force_authentication", "1");
+  url.searchParams.set("enable_fb_login", "0");
 
   return NextResponse.redirect(url);
 }
