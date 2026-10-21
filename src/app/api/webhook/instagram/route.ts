@@ -18,28 +18,48 @@ export async function GET(request: Request) {
     return new Response(challenge, { status: 200 });
   }
 
+  console.warn("Instagram webhook verification rejected", {
+    mode,
+    hasToken: Boolean(token),
+    hasChallenge: Boolean(challenge),
+    hasVerifyTokenConfigured: Boolean(process.env.META_VERIFY_TOKEN),
+  });
   return NextResponse.json({ error: "Verificação do webhook inválida." }, { status: 403 });
 }
 
 export async function POST(request: Request) {
   const raw = await request.text();
   const signature = request.headers.get("x-hub-signature-256");
-  const secret = process.env.META_APP_SECRET;
 
-  if (!secret || !signature?.startsWith("sha256=")) {
+  // Instagram Login and Facebook Login integrations may use different secret
+  // environment variable names. Try configured secrets without logging values.
+  const secrets = [
+    { label: "META_APP_SECRET", value: process.env.META_APP_SECRET },
+    { label: "INSTAGRAM_APP_SECRET", value: process.env.INSTAGRAM_APP_SECRET },
+    { label: "FACEBOOK_APP_SECRET", value: process.env.FACEBOOK_APP_SECRET },
+  ].filter((item): item is { label: string; value: string } => Boolean(item.value));
+
+  if (secrets.length === 0 || !signature?.startsWith("sha256=")) {
     console.warn("Instagram webhook rejected: missing app secret or signature", {
-      hasSecret: Boolean(secret),
+      configuredSecretNames: secrets.map((item) => item.label),
       hasSignature: Boolean(signature),
     });
     return NextResponse.json({ error: "Assinatura ausente." }, { status: 401 });
   }
 
-  const expected = "sha256=" + createHmac("sha256", secret).update(raw).digest("hex");
   const receivedBuffer = Buffer.from(signature);
-  const expectedBuffer = Buffer.from(expected);
+  const matchedSecret = secrets.find(({ value }) => {
+    const expected = "sha256=" + createHmac("sha256", value).update(raw).digest("hex");
+    const expectedBuffer = Buffer.from(expected);
+    return receivedBuffer.length === expectedBuffer.length &&
+      timingSafeEqual(receivedBuffer, expectedBuffer);
+  });
 
-  if (receivedBuffer.length !== expectedBuffer.length || !timingSafeEqual(receivedBuffer, expectedBuffer)) {
-    console.warn("Instagram webhook rejected: invalid signature");
+  if (!matchedSecret) {
+    console.warn("Instagram webhook rejected: invalid signature", {
+      configuredSecretNames: secrets.map((item) => item.label),
+      bodyLength: raw.length,
+    });
     return NextResponse.json({ error: "Assinatura inválida." }, { status: 401 });
   }
 
@@ -67,6 +87,7 @@ export async function POST(request: Request) {
 
   console.info("Instagram webhook accepted", {
     object: body?.object ?? null,
+    signatureMatchedSecret: matchedSecret.label,
     entryCount: entries.length,
     changeCount: changes.length,
     fields: changes.map((item: any) => item.field),
