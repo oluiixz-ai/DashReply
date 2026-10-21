@@ -20,7 +20,7 @@ export default function Home() {
   const [notice, setNotice] = useState("");
   const [metaStatus, setMetaStatus] = useState<{appSecret:boolean;verifyToken:boolean;accessToken:boolean;instagramAccountId:boolean;webhookUrl:string}|null>(null);
   const [subscriptionLoading, setSubscriptionLoading] = useState<"check" | "subscribe" | null>(null);
-  const [subscriptionResult, setSubscriptionResult] = useState<unknown>(null);
+  const [subscriptionResult, setSubscriptionResult] = useState<Record<string, unknown> | null>(null);
   const [subscriptionMessage, setSubscriptionMessage] = useState("");
   async function manageSubscriptions(action: "check" | "subscribe") {
     setSubscriptionLoading(action); setSubscriptionMessage(""); setSubscriptionResult(null);
