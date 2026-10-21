@@ -19,6 +19,7 @@ export default function Home() {
   const [search, setSearch] = useState("");
   const [notice, setNotice] = useState("");
   const [metaStatus, setMetaStatus] = useState<{appSecret:boolean;verifyToken:boolean;accessToken:boolean;instagramAccountId:boolean;webhookUrl:string}|null>(null);
+  const [instagramUsername, setInstagramUsername] = useState<string | null>(null);
   const [subscriptionLoading, setSubscriptionLoading] = useState<"check" | "subscribe" | null>(null);
   const [subscriptionResult, setSubscriptionResult] = useState<Record<string, unknown> | null>(null);
   const [subscriptionMessage, setSubscriptionMessage] = useState("");
@@ -32,6 +33,15 @@ export default function Home() {
     } catch { setSubscriptionMessage("Não foi possível consultar a API. Tente novamente."); }
     finally { setSubscriptionLoading(null); }
   }
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/meta/status", { cache: "no-store" }).then(r => r.ok ? r.json() : null).then(d => {
+      const identity = d?.tokenIdentity;
+      if (!cancelled && identity?.ok && identity?.matchesConfiguredAccount && typeof identity.username === "string") setInstagramUsername(identity.username);
+    }).catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
+
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const connection = params.get("instagram_connection");
@@ -121,7 +131,7 @@ export default function Home() {
       <div className="mt-5 flex items-center gap-3 border-t border-zinc-800 pt-4"><div className="flex h-9 w-9 items-center justify-center rounded-full bg-zinc-800 text-xs font-semibold">AD</div><div className="min-w-0 flex-1"><div className="truncate text-xs font-medium">Administrador</div><div className="text-[11px] text-zinc-500">Plano inicial</div></div><MoreHorizontal size={18} className="text-zinc-500"/></div>
     </aside>
     <section className="min-w-0 flex-1">
-      <header className="flex h-[68px] items-center justify-between border-b border-zinc-800/80 px-5 md:px-9"><div className="flex items-center gap-2 text-xs text-zinc-500"><span>Workspace</span><span>/</span><span className="text-zinc-200">{active}</span></div><div className="flex items-center gap-3"><button aria-label="Ajuda" className="hidden rounded-lg p-2 text-zinc-500 hover:bg-zinc-800 sm:block"><CircleHelp size={17}/></button><button aria-label="Notificações" className="relative rounded-lg p-2 text-zinc-400 hover:bg-zinc-800"><Bell size={17}/><span className="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full bg-violet-400"/></button><div className="h-7 border-l border-zinc-800"/><a href="/api/meta/connect" title="Conectar ou trocar conta do Instagram" className="flex items-center gap-2 rounded-lg border border-violet-500/40 bg-violet-500/10 px-2.5 py-1.5 transition hover:bg-violet-500/20"><div className="flex h-6 w-6 items-center justify-center rounded-md bg-gradient-to-br from-fuchsia-500 to-orange-400"><Instagram size={14}/></div><span className="text-xs text-zinc-200">Conectar Instagram</span><ChevronDown size={14} className="text-zinc-400"/></a></div></header>
+      <header className="flex h-[68px] items-center justify-between border-b border-zinc-800/80 px-5 md:px-9"><div className="flex items-center gap-2 text-xs text-zinc-500"><span>Workspace</span><span>/</span><span className="text-zinc-200">{active}</span></div><div className="flex items-center gap-3"><button aria-label="Ajuda" className="hidden rounded-lg p-2 text-zinc-500 hover:bg-zinc-800 sm:block"><CircleHelp size={17}/></button><button aria-label="Notificações" className="relative rounded-lg p-2 text-zinc-400 hover:bg-zinc-800"><Bell size={17}/><span className="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full bg-violet-400"/></button><div className="h-7 border-l border-zinc-800"/><a href="/api/meta/connect" title="Conectar ou trocar conta do Instagram" className="flex items-center gap-2 rounded-lg border border-violet-500/40 bg-violet-500/10 px-2.5 py-1.5 transition hover:bg-violet-500/20"><div className="flex h-6 w-6 items-center justify-center rounded-md bg-gradient-to-br from-fuchsia-500 to-orange-400"><Instagram size={14}/></div><span className="text-xs text-zinc-200">{instagramUsername ? `@${instagramUsername}` : "Conectar Instagram"}</span><ChevronDown size={14} className="text-zinc-400"/></a></div></header>
       <div className="mx-auto max-w-[1400px] p-5 md:p-9">
         <div className="mb-8 flex flex-col justify-between gap-4 sm:flex-row sm:items-end"><div><div className="mb-2 flex items-center gap-2 text-xs text-zinc-500"><span className={`h-1.5 w-1.5 rounded-full ${loading ? "bg-amber-400" : "bg-emerald-400"}`}/>{loading ? "Sincronizando dados" : "Dados persistidos no Neon"}</div><h1 className="text-2xl font-semibold tracking-tight md:text-[30px]">{active === "Visão geral" ? "Visão geral" : active}</h1><p className="mt-2 text-sm text-zinc-400">Acompanhe suas conversas e transforme comentários em conexões.</p></div><button onClick={() => { setShowModal(true); setNotice(""); }} className="flex items-center justify-center gap-2 rounded-xl bg-violet-500 px-4 py-2.5 text-sm font-medium text-white shadow-lg shadow-violet-950/30 transition hover:bg-violet-400"><Plus size={17}/> Nova automação</button></div>
         {notice && <div className="mb-5 rounded-xl border border-violet-500/30 bg-violet-500/10 px-4 py-3 text-sm text-violet-200">{notice}</div>}
