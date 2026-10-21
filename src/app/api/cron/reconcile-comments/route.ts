@@ -2,6 +2,7 @@ import { and, eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { automacoes, eventos } from "@/lib/db/schema";
+import { getInstagramAccessToken, getInstagramAccountId } from "@/lib/instagram-token";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -43,8 +44,8 @@ export async function GET(request: Request) {
   }
   if (!db) return NextResponse.json({ error: "Banco de dados não configurado." }, { status: 503 });
 
-  const token = process.env.INSTAGRAM_ACCESS_TOKEN || process.env.META_ACCESS_TOKEN;
-  const accountId = process.env.INSTAGRAM_ACCOUNT_ID;
+  const token = await getInstagramAccessToken();
+  const accountId = await getInstagramAccountId();
   if (!token || !accountId) {
     return NextResponse.json({ error: "Token ou ID da conta do Instagram não configurado." }, { status: 503 });
   }
