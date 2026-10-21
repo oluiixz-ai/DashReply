@@ -1,17 +1,14 @@
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
+import { getInstagramAccessToken } from "@/lib/instagram-token";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const GRAPH_URL = "https://graph.instagram.com/v26.0/me/subscribed_apps";
 
-function getAccessToken() {
-  return process.env.INSTAGRAM_ACCESS_TOKEN || process.env.META_ACCESS_TOKEN;
-}
-
 async function callInstagram(method: "GET" | "POST") {
-  const token = getAccessToken();
+  const token = await getInstagramAccessToken();
   if (!token) {
     return NextResponse.json(
       { error: "Token ausente. Configure INSTAGRAM_ACCESS_TOKEN na Vercel." },
