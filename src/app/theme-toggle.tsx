@@ -6,12 +6,12 @@ import { Moon, Sun } from "lucide-react";
 type Theme = "dark" | "light";
 
 export default function ThemeToggle() {
-  const [theme, setTheme] = useState<Theme>("dark");
+  const [theme, setTheme] = useState<Theme>("light");
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
     const saved = window.localStorage.getItem("dashreply-theme");
-    const next: Theme = saved === "light" ? "light" : "dark";
+    const next: Theme = saved === "dark" ? "dark" : "light";
     setTheme(next);
     document.documentElement.dataset.theme = next;
     setReady(true);
