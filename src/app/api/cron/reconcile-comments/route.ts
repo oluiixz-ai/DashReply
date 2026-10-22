@@ -1,7 +1,7 @@
-import { and, eq } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { automacoes, eventos } from "@/lib/db/schema";
+import { automacoes } from "@/lib/db/schema";
 import { getInstagramAccessToken, getInstagramAccountId } from "@/lib/instagram-token";
 
 export const runtime = "nodejs";
@@ -68,7 +68,6 @@ export async function GET(request: Request) {
 
     const cutoff = Date.now() - 72 * 60 * 60 * 1000;
     let commentsSeen = 0;
-    let recorded = 0;
     let matched = 0;
     const errors: string[] = [];
 
@@ -80,30 +79,15 @@ export async function GET(request: Request) {
           if (!comment.id || !comment.text || !comment.timestamp) continue;
           if (Date.parse(comment.timestamp) < cutoff) continue;
           commentsSeen += 1;
-          const [inserted] = await db.insert(eventos).values({
-            tipo: "comments_poll",
-            commentId: String(comment.id),
-            instagramUserId: comment.from?.id ? String(comment.from.id) : null,
-            status: "received",
-            detalhe: { source: "polling", mediaId, text: comment.text, timestamp: comment.timestamp, username: comment.from?.username ?? null },
-          }).onConflictDoNothing().returning({ id: eventos.id });
-
-          // A previously recorded webhook/poll event means this comment has already been seen.
-          if (!inserted) continue;
-          recorded += 1;
-
+          // This cron is observational only. It must not insert an event with commentId:
+          // the official webhook owns event processing, and the unique commentId index
+          // would otherwise let polling consume a comment before the webhook arrives.
           const applicableRules = rules.filter((rule) => {
             if (rule.escopo === "specific_post" && rule.postId !== mediaId) return false;
             if (rule.escopo === "selected_posts") return false;
             return matches(comment.text!, rule.palavraChave, rule.tipoCorrespondencia);
           });
-          if (!applicableRules.length) {
-            await db.update(eventos).set({ status: "no_match" }).where(eq(eventos.id, inserted.id));
-            continue;
-          }
-          const rule = applicableRules[0];
-          await db.update(eventos).set({ automacaoId: rule.id, status: "matched_dry_run" }).where(eq(eventos.id, inserted.id));
-          matched += 1;
+          if (applicableRules.length) matched += 1;
         }
       } catch (error) {
         errors.push(`${mediaId}: ${error instanceof Error ? error.message : "falha desconhecida"}`);
@@ -111,7 +95,7 @@ export async function GET(request: Request) {
     }
 
     console.info("Instagram comment reconciliation completed", { scannedMedia: mediaIds.size, commentsSeen, recorded, matched, errorCount: errors.length });
-    return NextResponse.json({ ok: errors.length === 0, scannedMedia: mediaIds.size, commentsSeen, recorded, matched, errors, sendingEnabled: false });
+    return NextResponse.json({ ok: errors.length === 0, scannedMedia: mediaIds.size, commentsSeen, matched, mode: "observation_only", errors, sendingEnabled: false });
   } catch (error) {
     console.error("Instagram comment reconciliation failed", error instanceof Error ? error.message : "unknown error");
     return NextResponse.json({ error: error instanceof Error ? error.message : "Falha ao consultar comentários." }, { status: 502 });
