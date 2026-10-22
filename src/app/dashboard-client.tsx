@@ -11,7 +11,8 @@ const nav = [
 ];
 
 export default function Home({ initialSection = "Visão geral" }: { initialSection?: string }) {
-  const [active, setActive] = useState(initialSection);\n  const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const [active, setActive] = useState(initialSection);
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [automations, setAutomations] = useState<Automation[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
