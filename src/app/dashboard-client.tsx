@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import ThemeToggle from "./theme-toggle";
-import { Activity, ArrowDownRight, ArrowUpRight, Bell, Bot, Check, ChevronDown, CircleHelp, Command, ExternalLink, Image as ImageIcon, Instagram, LayoutDashboard, LifeBuoy, MessageCircle, MoreHorizontal, Plus, Power, Search, Send, Settings2, ShieldCheck, Sparkles, Trash2, Users, Workflow, X, Zap } from "lucide-react";
+import { Activity, ArrowDownRight, ArrowUpRight, Bell, Bot, Check, ChevronDown, CircleHelp, Command, ExternalLink, Image as ImageIcon, Instagram, LayoutDashboard, Plug, Palette, ChevronRight, LifeBuoy, MessageCircle, MoreHorizontal, Plus, Power, Search, Send, Settings2, ShieldCheck, Sparkles, Trash2, Users, Workflow, X, Zap } from "lucide-react";
 
 type Automation = { id: number; name: string; keyword: string; scope: string; status: "Ativa" | "Pausada"; replies: number; dms: number; mediaIds?: string[] };
 type InstagramMedia = { id: string; caption?: string; media_type?: string; media_url?: string; thumbnail_url?: string; permalink?: string; timestamp?: string };
