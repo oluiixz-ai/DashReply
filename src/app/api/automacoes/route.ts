@@ -13,6 +13,7 @@ function toClient(row: typeof automacoes.$inferSelect) {
     name: row.nome,
     keyword: row.palavraChave,
     scope: row.escopo === "specific_post" ? "Publicação selecionada" : row.escopo === "selected_posts" ? "Publicações selecionadas" : "Todas as publicações",
+    mediaIds: (() => { if (!row.postId) return []; try { const parsed = JSON.parse(row.postId); return Array.isArray(parsed) ? parsed.filter((id): id is string => typeof id === "string") : [String(parsed)]; } catch { return [row.postId]; } })(),
     status: row.ativa ? "Ativa" as const : "Pausada" as const,
     replies: 0,
     dms: 0,

@@ -139,8 +139,18 @@ export async function POST(request: Request) {
       const rule = activeRules.find((candidate) => {
         const keyword = candidate.palavraChave.trim().toLocaleLowerCase("pt-BR");
         if (!keyword) return false;
-        if (candidate.escopo === "specific_post" && candidate.postId !== mediaId) return false;
-        if (candidate.escopo === "selected_posts") return false;
+        if (candidate.escopo === "specific_post" && (!mediaId || candidate.postId !== mediaId)) return false;
+        if (candidate.escopo === "selected_posts") {
+          if (!mediaId || !candidate.postId) return false;
+          let selectedIds: string[] = [];
+          try {
+            const parsed = JSON.parse(candidate.postId);
+            if (Array.isArray(parsed)) selectedIds = parsed.filter((value): value is string => typeof value === "string");
+          } catch {
+            selectedIds = [];
+          }
+          if (!selectedIds.includes(mediaId)) return false;
+        }
         if (candidate.tipoCorrespondencia === "exact") return normalizedText === keyword;
         if (candidate.tipoCorrespondencia === "starts_with") return normalizedText.startsWith(keyword);
         return normalizedText.includes(keyword);
