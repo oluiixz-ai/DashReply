@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import "./globals.css";
-import ThemeToggle from "./theme-toggle";
 
 export const metadata: Metadata = {
   title: "DashReply — Automação inteligente para Instagram",
@@ -9,5 +8,5 @@ export const metadata: Metadata = {
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
-  return <html lang="pt-BR" suppressHydrationWarning><body><ThemeToggle />{children}</body></html>;
+  return <html lang="pt-BR" suppressHydrationWarning><body>{children}</body></html>;
 }
