@@ -1,16 +1,13 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import ThemeToggle from "./theme-toggle";
 
 export const metadata: Metadata = {
   title: "DashReply — Automação inteligente para Instagram",
   description: "Gerencie automações, comentários, mensagens e contatos do Instagram em um só lugar.",
-  icons: {
-    icon: "/icon.svg",
-    shortcut: "/icon.svg",
-    apple: "/icon.svg",
-  },
+  icons: { icon: "/icon.svg", shortcut: "/icon.svg", apple: "/icon.svg" },
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
-  return <html lang="pt-BR"><body>{children}</body></html>;
+  return <html lang="pt-BR" suppressHydrationWarning><body><ThemeToggle />{children}</body></html>;
 }
