@@ -94,7 +94,7 @@ export async function GET(request: Request) {
       }
     }
 
-    console.info("Instagram comment reconciliation completed", { scannedMedia: mediaIds.size, commentsSeen, recorded, matched, errorCount: errors.length });
+    console.info("Instagram comment reconciliation completed", { scannedMedia: mediaIds.size, commentsSeen, matched, errorCount: errors.length });
     return NextResponse.json({ ok: errors.length === 0, scannedMedia: mediaIds.size, commentsSeen, matched, mode: "observation_only", errors, sendingEnabled: false });
   } catch (error) {
     console.error("Instagram comment reconciliation failed", error instanceof Error ? error.message : "unknown error");
