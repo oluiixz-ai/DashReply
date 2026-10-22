@@ -257,6 +257,15 @@ export async function POST(request: Request) {
       await db.update(eventos).set({
         automacaoId: rule.id,
         status: finalStatus,
+        detalhe: {
+          ...value,
+          delivery: {
+            publicReplyAttempted: Boolean(publicText),
+            publicReplySent: Boolean(publicText) && !failures.some((failure) => failure.startsWith("Resposta pública")),
+            privateReplyAttempted: Boolean(directText),
+            privateReplySent: Boolean(directText) && !failures.some((failure) => failure.startsWith("DM privada")),
+          },
+        },
         erro: failures.length ? failures.join(" | ").slice(0, 4000) : null,
       }).where(eq(eventos.id, inserted.id));
       if (sentAny) sent += 1;
