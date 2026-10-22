@@ -24,7 +24,7 @@ export default function ThemeToggle() {
     window.localStorage.setItem("dashreply-theme", next);
   }
 
-  return <button type="button" onClick={toggleTheme} aria-label={theme === "dark" ? "Ativar tema claro" : "Ativar tema escuro"} title={theme === "dark" ? "Ativar tema claro" : "Ativar tema escuro"} className="fixed right-4 top-4 z-[100] inline-flex items-center gap-2 rounded-xl border border-zinc-700 bg-zinc-900/95 px-3 py-2 text-xs font-medium text-zinc-100 shadow-lg backdrop-blur transition hover:border-violet-400 hover:bg-zinc-800">
+  return <button type="button" onClick={toggleTheme} aria-label={theme === "dark" ? "Ativar tema claro" : "Ativar tema escuro"} title={theme === "dark" ? "Ativar tema claro" : "Ativar tema escuro"} className="fixed bottom-4 right-4 z-[100] inline-flex items-center gap-2 rounded-xl border border-zinc-700 bg-zinc-900/95 px-3 py-2 text-xs font-medium text-zinc-100 shadow-lg backdrop-blur transition hover:border-violet-400 hover:bg-zinc-800">
     {theme === "dark" ? <Sun size={16} /> : <Moon size={16} />}
     <span>{ready ? (theme === "dark" ? "Tema claro" : "Tema escuro") : "Tema"}</span>
   </button>;
