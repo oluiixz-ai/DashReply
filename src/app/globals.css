@@ -25,3 +25,40 @@ html[data-theme="light"] input::placeholder, html[data-theme="light"] textarea::
 html[data-theme="light"] .shadow-black\/20, html[data-theme="light"] .shadow-2xl { --tw-shadow-color: #64748b12; }
 html[data-theme="light"] .hover\:bg-zinc-800:hover { background-color: #e5e7eb !important; }
 html[data-theme="light"] .hover\:bg-zinc-900:hover { background-color: #f1f5f9 !important; }
+
+/* Refinamento do tema claro: contraste consistente em cards, menus e formulários. */
+html[data-theme="light"] {
+  --bg: #f4f6fb;
+  --panel: #ffffff;
+  --line: #dfe4ee;
+  --muted: #596579;
+}
+html[data-theme="light"] body { color: #202637; }
+html[data-theme="light"] main,
+html[data-theme="light"] aside { color: #202637; }
+html[data-theme="light"] .bg-zinc-950,
+html[data-theme="light"] .bg-zinc-900,
+html[data-theme="light"] .bg-zinc-800\/50,
+html[data-theme="light"] .bg-zinc-900\/50,
+html[data-theme="light"] .bg-zinc-900\/80 { background-color: #ffffff !important; }
+html[data-theme="light"] .bg-zinc-800,
+html[data-theme="light"] .bg-zinc-700 { background-color: #edf0f6 !important; }
+html[data-theme="light"] .border-zinc-800\/80,
+html[data-theme="light"] .border-zinc-800\/60,
+html[data-theme="light"] .border-zinc-700\/80 { border-color: #dfe4ee !important; }
+html[data-theme="light"] .text-white { color: #202637; }
+html[data-theme="light"] .text-zinc-100,
+html[data-theme="light"] .text-zinc-200 { color: #202637 !important; }
+html[data-theme="light"] .text-zinc-300 { color: #394357 !important; }
+html[data-theme="light"] .text-zinc-400 { color: #596579 !important; }
+html[data-theme="light"] .text-zinc-500,
+html[data-theme="light"] .text-zinc-600 { color: #68758a !important; }
+html[data-theme="light"] input,
+html[data-theme="light"] textarea,
+html[data-theme="light"] select { background-color: #ffffff; border-color: #d5dce8; color: #202637; }
+html[data-theme="light"] input::placeholder,
+html[data-theme="light"] textarea::placeholder { color: #8b96a8; }
+html[data-theme="light"] table thead { background-color: #f3f5fa; }
+html[data-theme="light"] .hover\:bg-zinc-800:hover { background-color: #e8edf5 !important; }
+html[data-theme="light"] .hover\:bg-zinc-900:hover { background-color: #eef2f8 !important; }
+
