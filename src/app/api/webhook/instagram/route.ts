@@ -2,7 +2,7 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 import { desc, eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { automacoes, eventos } from "@/lib/db/schema";
+import { automacoes, configuracoes, eventos } from "@/lib/db/schema";
 import { getInstagramAccessToken, getInstagramAccountId } from "@/lib/instagram-token";
 
 export const runtime = "nodejs";
@@ -163,15 +163,61 @@ export async function POST(request: Request) {
       }
 
       matched += 1;
-      const publicText = rule.respostaPublica?.trim();
-      const directText = rule.mensagemDirect?.trim();
-      if (!sendingEnabled || (!publicText && !directText)) {
+      // Prefer the saved visual flow when one exists; otherwise retain the legacy rule behavior.
+      const flowRows = await db.select().from(configuracoes)
+        .where(eq(configuracoes.chave, "automation_flow_" + rule.id)).limit(1);
+      let flowPublicText = "";
+      let flowDirectText = "";
+      let flowUnsupported = "";
+      if (flowRows[0]?.valor) {
+        try {
+          const flow = JSON.parse(flowRows[0].valor) as { nodes?: Array<Record<string, unknown>>; edges?: Array<Record<string, unknown>> };
+          const nodes = Array.isArray(flow.nodes) ? flow.nodes : [];
+          const edges = Array.isArray(flow.edges) ? flow.edges : [];
+          const byId = new Map(nodes.map((node) => [String(node.id), node]));
+          const trigger = nodes.find((node) => node.type === "trigger");
+          let currentId = trigger ? String(trigger.id) : "";
+          const visited = new Set<string>();
+          for (let step = 0; currentId && step < 80; step += 1) {
+            if (visited.has(currentId)) { flowUnsupported = "O fluxo contém um ciclo e foi interrompido."; break; }
+            visited.add(currentId);
+            const node = byId.get(currentId);
+            if (!node) break;
+            if (node.type === "condition") {
+              const condition = String(node.keyword ?? "").trim().toLocaleLowerCase("pt-BR");
+              const branch = condition && normalizedText.includes(condition) ? "yes" : "no";
+              const edge = edges.find((e) => String(e.from) === currentId && String(e.branch ?? "") === branch);
+              currentId = String(node[branch] ?? edge?.to ?? "");
+              continue;
+            }
+            if (node.type === "public_reply" && !flowPublicText) flowPublicText = String(node.text ?? "").trim();
+            if ((node.type === "message" || node.type === "button") && !flowDirectText) {
+              const message = String(node.text ?? "").trim();
+              const url = node.type === "button" ? String(node.buttonUrl ?? "").trim() : "";
+              flowDirectText = [message, url && url !== "https://" ? url : ""].filter(Boolean).join("\\n");
+            }
+            if (node.type === "delay") {
+              flowUnsupported = "O bloco Aguardar precisa de um worker agendado; as etapas seguintes não foram executadas.";
+              break;
+            }
+            const edge = edges.find((e) => String(e.from) === currentId && !e.branch);
+            currentId = String(node.next ?? edge?.to ?? "");
+          }
+        } catch (error) {
+          flowUnsupported = "O fluxo salvo não pôde ser interpretado.";
+          console.error("Saved automation flow invalid", { automationId: rule.id, error });
+        }
+      }
+      const publicText = flowRows[0]?.valor ? flowPublicText : rule.respostaPublica?.trim() ?? "";
+      const directText = flowRows[0]?.valor ? flowDirectText : rule.mensagemDirect?.trim() ?? "";
+      if (!sendingEnabled || (!publicText && !directText) || flowUnsupported) {
         await db.update(eventos).set({
           automacaoId: rule.id,
-          status: "matched_dry_run",
+          status: flowUnsupported ? "flow_incomplete" : "matched_dry_run",
+          erro: flowUnsupported || null,
         }).where(eq(eventos.id, inserted.id));
-        console.info("Instagram comment matched automation in dry-run", {
-          commentId, automationId: rule.id, sendingEnabled, hasPublicReply: Boolean(publicText), hasPrivateReply: Boolean(directText),
+        console.info("Instagram comment matched automation", {
+          commentId, automationId: rule.id, sendingEnabled, hasPublicReply: Boolean(publicText), hasPrivateReply: Boolean(directText), flowMode: Boolean(flowRows[0]?.valor), flowUnsupported,
         });
         continue;
       }
