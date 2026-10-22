@@ -1,13 +1,13 @@
 import { NextResponse } from "next/server";
-import { desc } from "drizzle-orm";
+import { desc, inArray } from "drizzle-orm";
 import { getSession } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { automacoes } from "@/lib/db/schema";
+import { automacoes, eventos } from "@/lib/db/schema";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-function toClient(row: typeof automacoes.$inferSelect) {
+function toClient(row: typeof automacoes.$inferSelect, metrics: { replies: number; dms: number } = { replies: 0, dms: 0 }) {
   return {
     id: row.id,
     name: row.nome,
@@ -15,8 +15,8 @@ function toClient(row: typeof automacoes.$inferSelect) {
     scope: row.escopo === "specific_post" ? "Publicação selecionada" : row.escopo === "selected_posts" ? "Publicações selecionadas" : "Todas as publicações",
     mediaIds: (() => { if (!row.postId) return []; try { const parsed = JSON.parse(row.postId); return Array.isArray(parsed) ? parsed.filter((id): id is string => typeof id === "string") : [String(parsed)]; } catch { return [row.postId]; } })(),
     status: row.ativa ? "Ativa" as const : "Pausada" as const,
-    replies: 0,
-    dms: 0,
+    replies: metrics.replies,
+    dms: metrics.dms,
   };
 }
 
@@ -25,7 +25,26 @@ export async function GET() {
   if (!db) return NextResponse.json({ error: "Banco de dados não configurado." }, { status: 503 });
   try {
     const rows = await db.select().from(automacoes).orderBy(desc(automacoes.criadoEm));
-    return NextResponse.json({ automations: rows.map(toClient) });
+    const ids = rows.map((row) => row.id);
+    const eventRows = ids.length
+      ? await db.select({ automacaoId: eventos.automacaoId, detalhe: eventos.detalhe })
+          .from(eventos)
+          .where(inArray(eventos.automacaoId, ids))
+      : [];
+    const metrics = new Map<number, { replies: number; dms: number }>();
+    for (const event of eventRows) {
+      if (!event.automacaoId || !event.detalhe || typeof event.detalhe !== "object") continue;
+      const delivery = (event.detalhe as Record<string, unknown>).delivery;
+      if (!delivery || typeof delivery !== "object") continue;
+      const result = delivery as Record<string, unknown>;
+      const current = metrics.get(event.automacaoId) ?? { replies: 0, dms: 0 };
+      if (result.publicReplySent === true) current.replies += 1;
+      if (result.privateReplySent === true) current.dms += 1;
+      metrics.set(event.automacaoId, current);
+    }
+    return NextResponse.json({
+      automations: rows.map((row) => toClient(row, metrics.get(row.id) ?? { replies: 0, dms: 0 })),
+    });
   } catch (error) {
     console.error("Falha ao listar automações", error);
     return NextResponse.json({ error: "Não foi possível carregar as automações." }, { status: 500 });
