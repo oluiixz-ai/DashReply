@@ -27,7 +27,7 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
     if (!hasPostIds || !Array.isArray(input.postIds)) return NextResponse.json({ error: "Selecione as mídias antes de salvar." }, { status: 400 });
     const ids = input.postIds;
     const max = escopo === "specific_post" ? 1 : 5;
-    if (ids.length < 1 || ids.length > max || ids.some((value) => typeof value !== "string" || !/^\\d{5,30}$/.test(value))) return NextResponse.json({ error: `Selecione de 1 a ${max} mídia(s) válida(s).` }, { status: 400 });
+    if (ids.length < 1 || ids.length > max || ids.some((value) => typeof value !== "string" || !/^\d{5,30}$/.test(value))) return NextResponse.json({ error: `Selecione de 1 a ${max} mídia(s) válida(s).` }, { status: 400 });
     postId = escopo === "specific_post" ? ids[0] as string : JSON.stringify(ids);
     if (postId.length > 120) return NextResponse.json({ error: "A seleção excede o limite de armazenamento. Reduza a quantidade de mídias." }, { status: 400 });
   } else if (escopo === "all_posts") {
