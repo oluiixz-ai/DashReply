@@ -222,7 +222,7 @@ export default function Home({ initialSection = "Visão geral" }: { initialSecti
 
   return <main className="min-h-screen md:flex">
     <aside className="hidden w-[248px] shrink-0 flex-col border-r border-zinc-800/80 bg-[#0d0d10] p-5 md:flex">
-      <div className="mb-9 flex items-center gap-3 px-1"><img src="/icon.svg" alt="DashReply" className="h-10 w-10 object-contain" /><div><div className="text-[17px] font-semibold tracking-tight">DashReply</div><div className="text-[11px] text-zinc-500">INSTAGRAM WORKSPACE</div></div></div>
+      <div className="mb-9 px-1"><img src="/logo.svg" alt="DashReply — Instagram Workspace" className="h-auto w-full max-w-[205px] object-contain" /><div className="mt-1 pl-1 text-[10px] tracking-[.14em] text-zinc-500">INSTAGRAM WORKSPACE</div></div>
       <div className="mb-3 px-2 text-[10px] font-semibold uppercase tracking-[.18em] text-zinc-600">Workspace</div>
       <nav className="space-y-1">{nav.map(item => { const Icon = item.icon; return <a key={item.label} href={item.href} className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-[13px] transition ${active === item.label ? "bg-violet-500/15 text-violet-200" : "text-zinc-400 hover:bg-zinc-800/70 hover:text-zinc-100"}`}><Icon size={17}/>{item.label}</a> })}</nav>
       <div className="mb-3 mt-9 px-2 text-[10px] font-semibold uppercase tracking-[.18em] text-zinc-600">Preferências</div>
