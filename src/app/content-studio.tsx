@@ -14,8 +14,89 @@ export default function ContentStudio() {
   const [showSubtitles, setShowSubtitles] = useState(true);
   const [showVerifiedBadge, setShowVerifiedBadge] = useState(true);
   const [draftStatus, setDraftStatus] = useState("");
+  const [renderStatus, setRenderStatus] = useState("");
+  const [renderedUrl, setRenderedUrl] = useState("");
+  const [isRendering, setIsRendering] = useState(false);
+  const previewVideoRef = useRef<HTMLVideoElement>(null);
   const videoInput = useRef<HTMLInputElement>(null);
   const logoInput = useRef<HTMLInputElement>(null);
+
+  async function renderVideo() {
+    const video = previewVideoRef.current;
+    if (!video || !videoUrl) { setRenderStatus("Importe um vídeo primeiro."); return; }
+    if (!("MediaRecorder" in window) || !HTMLCanvasElement.prototype.captureStream) {
+      setRenderStatus("A exportação requer um navegador atualizado, como o Chrome."); return;
+    }
+    setIsRendering(true);
+    setRenderStatus("Preparando a renderização...");
+    if (renderedUrl) URL.revokeObjectURL(renderedUrl);
+    setRenderedUrl("");
+    const canvas = document.createElement("canvas");
+    canvas.width = 1080; canvas.height = 1920;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) { setIsRendering(false); setRenderStatus("Não foi possível iniciar o renderizador."); return; }
+    const draw = () => {
+      ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, 1080, 1920);
+      ctx.fillStyle = "#111"; ctx.font = "bold 46px Arial"; ctx.textAlign = "left";
+      ctx.fillText((profileName || "Nome do perfil").slice(0, 28), 70, 75, 850);
+      if (showVerifiedBadge) { ctx.fillStyle = "#3b82f6"; ctx.beginPath(); ctx.arc(48, 62, 18, 0, Math.PI * 2); ctx.fill(); }
+      ctx.fillStyle = "#555"; ctx.font = "30px Arial"; ctx.fillText((handle || "@seuperfil").slice(0, 40), 70, 125, 900);
+      if (video.readyState >= 2 && video.videoWidth) {
+        const top = 170, height = 1280, scale = Math.max(1080 / video.videoWidth, height / video.videoHeight);
+        const width = video.videoWidth * scale, vh = video.videoHeight * scale;
+        ctx.save(); ctx.beginPath(); ctx.rect(0, top, 1080, height); ctx.clip();
+        ctx.drawImage(video, (1080 - width) / 2, top + (height - vh) / 2, width, vh); ctx.restore();
+      }
+      if (showSubtitles) {
+        ctx.fillStyle = "rgba(0,0,0,.75)"; ctx.fillRect(40, 1340, 1000, 70);
+        ctx.fillStyle = "#fff"; ctx.font = "bold 30px Arial"; ctx.textAlign = "center";
+        ctx.fillText("Espaço reservado para legendas", 540, 1385, 950);
+      }
+      ctx.fillStyle = "#fff"; ctx.fillRect(0, 1450, 1080, 470);
+      ctx.fillStyle = "#111"; ctx.font = "bold 64px Arial"; ctx.textAlign = "center";
+      const text = bottomText || "Seu texto de destaque";
+      const words = text.split(/\s+/); let line = ""; let y = 1630;
+      for (const word of words) {
+        const next = line ? line + " " + word : word;
+        if (ctx.measureText(next).width > 940 && line) { ctx.fillText(line, 540, y, 940); y += 78; line = word; }
+        else line = next;
+      }
+      if (line && y < 1880) ctx.fillText(line, 540, y, 940);
+      ctx.textAlign = "left";
+    };
+    try {
+      video.pause(); video.currentTime = 0;
+      await new Promise((resolve, reject) => {
+        if (video.readyState >= 2) resolve(true);
+        else { video.onloadeddata = () => resolve(true); video.onerror = () => reject(new Error("Não foi possível ler o vídeo.")); }
+      });
+      draw();
+      const canvasStream = canvas.captureStream(30);
+      const source = video as HTMLVideoElement & { captureStream?: () => MediaStream; mozCaptureStream?: () => MediaStream };
+      const sourceStream = source.captureStream?.() || source.mozCaptureStream?.();
+      const stream = new MediaStream([...canvasStream.getVideoTracks(), ...(sourceStream?.getAudioTracks() || [])]);
+      const mime = MediaRecorder.isTypeSupported("video/webm;codecs=vp9,opus") ? "video/webm;codecs=vp9,opus" : "video/webm";
+      const recorder = new MediaRecorder(stream, { mimeType: mime });
+      const chunks: BlobPart[] = [];
+      recorder.ondataavailable = event => { if (event.data.size) chunks.push(event.data); };
+      recorder.onerror = () => { setIsRendering(false); setRenderStatus("Falha ao renderizar. Tente um vídeo menor."); };
+      recorder.onstop = () => {
+        const url = URL.createObjectURL(new Blob(chunks, { type: "video/webm" }));
+        setRenderedUrl(url); setIsRendering(false);
+        setRenderStatus("Renderização concluída. Baixe o WebM e confira o áudio antes de publicar.");
+        stream.getTracks().forEach(track => track.stop()); video.pause(); video.currentTime = 0;
+      };
+      recorder.start(250);
+      setRenderStatus("Renderizando em tempo real. Mantenha esta aba aberta.");
+      let frame = 0;
+      const paint = () => { draw(); if (!video.ended && !video.paused) frame = requestAnimationFrame(paint); };
+      video.onended = () => { cancelAnimationFrame(frame); draw(); if (recorder.state !== "inactive") recorder.stop(); };
+      await video.play(); paint();
+    } catch (error) {
+      setIsRendering(false);
+      setRenderStatus(error instanceof Error ? error.message : "Falha ao renderizar o vídeo.");
+    }
+  }
 
   function saveDraft() {
     const draft = { profileName, handle, bottomText, captionText, showSubtitles, showVerifiedBadge, savedAt: new Date().toISOString() };
@@ -102,12 +183,17 @@ export default function ContentStudio() {
           <div className="min-w-0 flex-1"><div className="flex min-w-0 items-center gap-1"><div className="truncate text-sm font-bold">{profileName || "Nome do perfil"}</div>{showVerifiedBadge && <BadgeCheck aria-label="Perfil verificado" size={13} className="relative -top-1 shrink-0 fill-blue-500 text-blue-500 [&>path:last-child]:text-white"/>}</div><div className="truncate text-xs text-zinc-600">{handle || "@seuperfil"}</div></div>
         </div>
         <div className="relative aspect-[9/11] overflow-hidden bg-zinc-900">
-          {videoUrl ? <video src={videoUrl} controls playsInline className="h-full w-full object-cover"/> : <div className="flex h-full flex-col items-center justify-center gap-3 px-5 text-center text-white"><FileVideo size={38} className="text-zinc-500"/><span className="text-sm font-medium">Seu vídeo aparecerá aqui</span><span className="text-xs text-zinc-500">Importe um arquivo para ver a prévia</span></div>}
+          {videoUrl ? <video ref={previewVideoRef} src={videoUrl} controls playsInline className="h-full w-full object-cover"/> : <div className="flex h-full flex-col items-center justify-center gap-3 px-5 text-center text-white"><FileVideo size={38} className="text-zinc-500"/><span className="text-sm font-medium">Seu vídeo aparecerá aqui</span><span className="text-xs text-zinc-500">Importe um arquivo para ver a prévia</span></div>}
           {videoUrl && showSubtitles && <div className="pointer-events-none absolute bottom-5 left-3 right-3 text-center"><span className="rounded bg-black/75 px-2 py-1 text-xs font-bold text-white">Prévia das legendas</span></div>}
         </div>
         <div className="min-h-[104px] px-4 py-5"><div className="text-center text-[17px] font-extrabold leading-snug">{bottomText || "Seu texto de destaque"}</div></div>
       </div>
       <label className="mt-4 block"><span className="mb-2 block text-xs font-medium text-zinc-300">Link de referência (opcional)</span><input placeholder="Cole o link do Reel para referência" className="w-full rounded-xl border border-zinc-700 bg-zinc-950 px-3 py-2.5 text-sm text-white outline-none focus:border-violet-500"/></label>
+      <div className="mt-4 space-y-2">
+        <button onClick={renderVideo} disabled={!videoUrl || isRendering} className="flex w-full items-center justify-center gap-2 rounded-xl bg-violet-500 px-4 py-3 text-sm font-semibold text-white transition hover:bg-violet-400 disabled:opacity-50"><WandSparkles size={17}/>{isRendering ? "Renderizando..." : "Renderizar vídeo com template"}</button>
+        {renderStatus && <p role="status" className="text-xs leading-5 text-zinc-400">{renderStatus}</p>}
+        {renderedUrl && <a href={renderedUrl} download="dashreply-video.webm" className="flex w-full items-center justify-center gap-2 rounded-xl border border-emerald-500/40 px-4 py-3 text-sm font-semibold text-emerald-300 hover:bg-emerald-500/10"><Upload size={16}/>Baixar vídeo renderizado (.webm)</a>}
+      </div>
       <div className="mt-4 grid grid-cols-2 gap-2"><button onClick={()=>videoInput.current?.click()} className="flex items-center justify-center gap-2 rounded-xl border border-zinc-700 px-3 py-2.5 text-xs text-zinc-200 hover:bg-zinc-800"><Video size={15}/>Trocar vídeo</button><button disabled className="flex items-center justify-center gap-2 rounded-xl bg-violet-500/40 px-3 py-2.5 text-xs font-semibold text-white/70" title="Disponível após conectar o renderizador"><CalendarClock size={15}/>Agendar</button></div>
       <p className="mt-3 text-[11px] leading-5 text-zinc-500">O vídeo selecionado fica nesta prévia local. Ele ainda não é enviado nem publicado.</p>
     </aside>
