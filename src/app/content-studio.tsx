@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { BadgeCheck, CalendarClock, Captions, Check, Copy, FileVideo, ImagePlus, Instagram, LayoutTemplate, Upload, Video, WandSparkles } from "lucide-react";
 
 export default function ContentStudio() {
@@ -17,6 +17,7 @@ export default function ContentStudio() {
   const [showScheduleForm, setShowScheduleForm] = useState(false);
   const [scheduledAt, setScheduledAt] = useState("");
   const [scheduleStatus, setScheduleStatus] = useState("");
+  const [savedPlans, setSavedPlans] = useState<Array<{id:string; profileName:string; handle:string; captionText:string; scheduledAt:string; videoFileName:string; status:string}>>([]);
   const [renderStatus, setRenderStatus] = useState("");
   const [renderedUrl, setRenderedUrl] = useState("");
   const [isRendering, setIsRendering] = useState(false);
@@ -152,6 +153,18 @@ export default function ContentStudio() {
     }
   }
 
+  useEffect(() => {
+    let active = true;
+    fetch("/api/content-schedule", { cache: "no-store" })
+      .then(async response => {
+        if (!response.ok) return null;
+        return response.json();
+      })
+      .then(data => { if (active && Array.isArray(data?.plans)) setSavedPlans(data.plans); })
+      .catch(() => {});
+    return () => { active = false; };
+  }, []);
+
   function saveDraft() {
     const draft = { profileName, handle, bottomText, captionText, showVerifiedBadge, savedAt: new Date().toISOString() };
     try {
@@ -178,31 +191,26 @@ export default function ContentStudio() {
     }
   }
 
-  function saveSchedulePlan() {
-    if (!renderedUrl) { setScheduleStatus("Renderize e baixe o vídeo antes de planejar a publicação."); return; }
+  async function saveSchedulePlan() {
+    if (!videoName) { setScheduleStatus("Selecione um vídeo antes de planejar a publicação."); return; }
     if (!scheduledAt) { setScheduleStatus("Escolha a data e o horário desejados."); return; }
     const scheduledDate = new Date(scheduledAt);
     if (Number.isNaN(scheduledDate.getTime()) || scheduledDate.getTime() <= Date.now()) {
       setScheduleStatus("Escolha um horário futuro."); return;
     }
+    setScheduleStatus("Salvando no banco de dados...");
     try {
-      const key = "dashreply-scheduled-plans";
-      const existing = JSON.parse(localStorage.getItem(key) || "[]");
-      const plans = Array.isArray(existing) ? existing : [];
-      plans.push({
-        id: `plan-${Date.now()}`,
-        profileName,
-        handle,
-        captionText,
-        scheduledAt: scheduledDate.toISOString(),
-        videoFileName: videoName,
-        createdAt: new Date().toISOString(),
-        status: "planejado"
+      const response = await fetch("/api/content-schedule", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ profileName, handle, captionText, scheduledAt: scheduledDate.toISOString(), videoFileName: videoName })
       });
-      localStorage.setItem(key, JSON.stringify(plans));
-      setScheduleStatus("Planejamento salvo neste navegador. Isso não publica automaticamente no Instagram.");
+      const data = await response.json();
+      if (!response.ok) { setScheduleStatus(data.error || "Não foi possível salvar o planejamento."); return; }
+      setSavedPlans(current => [...current, data.plan].sort((a,b) => new Date(a.scheduledAt).getTime() - new Date(b.scheduledAt).getTime()));
+      setScheduleStatus("Planejamento salvo no banco de dados. A publicação automática ainda não está conectada.");
     } catch {
-      setScheduleStatus("Não foi possível salvar o planejamento neste navegador.");
+      setScheduleStatus("Falha de conexão ao salvar. Verifique a publicação e tente novamente.");
     }
   }
 
@@ -277,6 +285,7 @@ export default function ContentStudio() {
         {renderedUrl && <a href={renderedUrl} download="dashreply-video.webm" className="flex w-full items-center justify-center gap-2 rounded-xl border border-emerald-500/40 px-4 py-3 text-sm font-semibold text-emerald-300 hover:bg-emerald-500/10"><Upload size={16}/>Baixar vídeo renderizado (.webm)</a>}
       </div>
       <div className="mt-4 grid grid-cols-2 gap-2"><button onClick={()=>videoInput.current?.click()} className="flex items-center justify-center gap-2 rounded-xl border border-zinc-700 px-3 py-2.5 text-xs text-zinc-200 hover:bg-zinc-800"><Video size={15}/>Trocar vídeo</button><button onClick={()=>{setShowScheduleForm(v=>!v);setScheduleStatus("");}} className="flex items-center justify-center gap-2 rounded-xl bg-violet-500 px-3 py-2.5 text-xs font-semibold text-white hover:bg-violet-400"><CalendarClock size={15}/>Planejar horário</button></div>
+      {savedPlans.length > 0 && <div className="mt-3 rounded-xl border border-zinc-800 p-3"><h3 className="mb-2 text-xs font-semibold text-zinc-200">Planejamentos salvos</h3><div className="space-y-2">{savedPlans.slice(0,5).map(plan => <div key={plan.id} className="rounded-lg bg-zinc-950/70 p-2"><div className="text-xs font-medium text-zinc-200">{new Date(plan.scheduledAt).toLocaleString("pt-BR", {dateStyle:"short",timeStyle:"short"})}</div><div className="mt-1 truncate text-[11px] text-zinc-400">{plan.videoFileName}</div><div className="mt-1 text-[10px] text-violet-300">{plan.status === "planned" ? "Planejado · publicação automática pendente" : plan.status}</div></div>)}</div></div>}
       {showScheduleForm && <div className="mt-3 space-y-3 rounded-xl border border-violet-500/30 bg-violet-500/5 p-3"><p className="text-xs leading-5 text-zinc-300">Escolha quando você pretende publicar. Por enquanto, o horário fica salvo neste navegador e não envia o vídeo ao Instagram.</p><label className="block"><span className="mb-1.5 block text-xs text-zinc-400">Data e horário</span><input type="datetime-local" value={scheduledAt} min={new Date(Date.now()-new Date().getTimezoneOffset()*60000).toISOString().slice(0,16)} onChange={e=>{setScheduledAt(e.target.value);setScheduleStatus("");}} className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-white"/></label><button onClick={saveSchedulePlan} className="w-full rounded-lg bg-violet-500 px-3 py-2.5 text-sm font-semibold text-white hover:bg-violet-400">Salvar planejamento</button>{scheduleStatus && <p role="status" className="text-xs leading-5 text-zinc-300">{scheduleStatus}</p>}</div>}
       <p className="mt-3 text-[11px] leading-5 text-zinc-500">O vídeo fica no navegador. O planejamento de horário é local; publicação automática ainda não está conectada.</p>
     </aside>
