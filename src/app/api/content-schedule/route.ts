@@ -34,12 +34,15 @@ export async function POST(request: Request) {
     const handle = typeof body.handle === "string" ? body.handle.slice(0, 100) : "";
     const captionText = typeof body.captionText === "string" ? body.captionText.slice(0, 2200) : "";
     const videoFileName = typeof body.videoFileName === "string" ? body.videoFileName.slice(0, 255) : "";
+    const videoUrl = typeof body.videoUrl === "string" ? body.videoUrl.slice(0, 2000) : "";
     const scheduledAt = new Date(body.scheduledAt);
     if (!Number.isFinite(scheduledAt.getTime()) || scheduledAt.getTime() <= Date.now()) {
       return NextResponse.json({ error: "Escolha uma data e horário futuros." }, { status: 400 });
     }
     if (!videoFileName) return NextResponse.json({ error: "Selecione um vídeo antes de salvar o planejamento." }, { status: 400 });
-    const rows = await sql`INSERT INTO public.content_schedule_plans (user_email, profile_name, instagram_handle, caption_text, scheduled_at, video_file_name, status) VALUES (${session.email}, ${profileName}, ${handle}, ${captionText}, ${scheduledAt.toISOString()}, ${videoFileName}, 'planned') RETURNING id, profile_name AS "profileName", instagram_handle AS handle, caption_text AS "captionText", scheduled_at AS "scheduledAt", video_file_name AS "videoFileName", status, created_at AS "createdAt"`;
+    const publicBase = process.env.R2_PUBLIC_URL?.replace(/\/$/, "");
+    if (!publicBase || !videoUrl.startsWith(publicBase + "/")) return NextResponse.json({ error: "Envie o vídeo ao armazenamento antes de salvar o planejamento." }, { status: 400 });
+    const rows = await sql`INSERT INTO public.content_schedule_plans (user_email, profile_name, instagram_handle, caption_text, scheduled_at, video_file_name, video_url, status) VALUES (${session.email}, ${profileName}, ${handle}, ${captionText}, ${scheduledAt.toISOString()}, ${videoFileName}, ${videoUrl}, 'planned') RETURNING id, profile_name AS "profileName", instagram_handle AS handle, caption_text AS "captionText", scheduled_at AS "scheduledAt", video_file_name AS "videoFileName", video_url AS "videoUrl", status, created_at AS "createdAt"`;
     return NextResponse.json({ plan: rows[0], message: "Planejamento salvo no banco de dados. A publicação automática ainda precisa da conexão de mídia e permissões do Instagram." }, { status: 201 });
   } catch (error) {
     console.error("Failed to save content schedule plan", error);
