@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { neon } from "@neondatabase/serverless";
+import { neon, type NeonQueryFunction } from "@neondatabase/serverless";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -43,7 +43,7 @@ async function graphRequest(
   return data;
 }
 
-async function markFailed(sql: ReturnType<typeof neon>, planId: string, message: string) {
+async function markFailed(sql: NeonQueryFunction<false, false>, planId: string, message: string) {
   await sql`
     UPDATE public.content_schedule_plans
     SET status = 'failed', error_message = ${message.slice(0, 2000)}, updated_at = NOW()
@@ -71,6 +71,18 @@ export async function GET(request: Request) {
   let newPlans: Plan[];
   let pendingPlans: Plan[];
   try {
+    // Recover interrupted claims that never persisted a Meta container ID.
+    // The route has a 60-second execution limit, so 10 minutes is beyond a normal run.
+    await sql`
+      UPDATE public.content_schedule_plans
+      SET status = 'planned',
+          error_message = 'Recuperado automaticamente após interrupção antes de salvar o contêiner.',
+          updated_at = NOW()
+      WHERE status = 'publishing'
+        AND instagram_media_id IS NULL
+        AND updated_at < NOW() - INTERVAL '10 minutes'
+    `;
+
     newPlans = await sql`
       UPDATE public.content_schedule_plans
       SET status = 'publishing', updated_at = NOW(), error_message = NULL
@@ -132,26 +144,74 @@ export async function GET(request: Request) {
   }
 
   // Check containers created by this or a previous invocation; never sleep inside a function.
+  // Refresh updated_at while waiting so a few long-running containers cannot starve later items.
   for (const plan of pendingPlans) {
     const containerId = plan.instagram_media_id;
     if (!containerId) continue;
+
+    let status: any;
     try {
-      const status = await graphRequest(containerId, { fields: "status_code,status" }, token, "GET");
-      const state = String(status.status_code || "");
-      const detail = String(status.status || "");
+      status = await graphRequest(containerId, { fields: "status_code,status" }, token, "GET");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Falha temporária ao consultar o contêiner.";
+      console.error("Could not check Instagram container status", { planId: plan.id, error: message });
+      try {
+        await sql`
+          UPDATE public.content_schedule_plans
+          SET error_message = ${message.slice(0, 2000)}, updated_at = NOW()
+          WHERE id = ${plan.id} AND status = 'publishing' AND instagram_media_id = ${containerId}
+        `;
+      } catch (dbError) {
+        console.error("Could not save temporary container status error", dbError);
+      }
+      summary.waiting++;
+      continue;
+    }
 
-      if (state === "IN_PROGRESS" || state === "PUBLISHED") {
-        summary.waiting++;
-        continue;
-      }
-      if (state === "ERROR" || state === "EXPIRED") {
-        throw new Error(detail || `A Meta informou status ${state}.`);
-      }
-      if (state !== "FINISHED") {
-        summary.waiting++;
-        continue;
-      }
+    const state = String(status.status_code || "");
+    const detail = String(status.status || "");
 
+    if (state === "PUBLISHED") {
+      // A previous publish request may have succeeded even if saving its response failed.
+      // Mark it complete without sending another media_publish request.
+      try {
+        await sql`
+          UPDATE public.content_schedule_plans
+          SET status = 'published', error_message = NULL, updated_at = NOW()
+          WHERE id = ${plan.id} AND status = 'publishing' AND instagram_media_id = ${containerId}
+        `;
+        summary.published++;
+      } catch (error) {
+        console.error("Could not reconcile already-published Instagram container", { planId: plan.id, error });
+        summary.waiting++;
+      }
+      continue;
+    }
+
+    if (state === "IN_PROGRESS" || (state !== "FINISHED" && state !== "ERROR" && state !== "EXPIRED")) {
+      try {
+        await sql`
+          UPDATE public.content_schedule_plans
+          SET error_message = NULL, updated_at = NOW()
+          WHERE id = ${plan.id} AND status = 'publishing' AND instagram_media_id = ${containerId}
+        `;
+      } catch (error) {
+        console.error("Could not refresh waiting Instagram container", { planId: plan.id, error });
+      }
+      summary.waiting++;
+      continue;
+    }
+
+    if (state === "ERROR" || state === "EXPIRED") {
+      const message = detail || `A Meta informou status ${state}.`;
+      try { await markFailed(sql, plan.id, message); } catch (dbError) {
+        console.error("Could not save failed Instagram container status", dbError);
+      }
+      summary.failed++;
+      continue;
+    }
+
+    try {
       const published = await graphRequest(`${instagramId}/media_publish`, {
         creation_id: containerId
       }, token);
@@ -168,10 +228,47 @@ export async function GET(request: Request) {
     } catch (error) {
       const message = error instanceof Error ? error.message : "Erro desconhecido na publicação.";
       console.error("Instagram scheduled publish failed", { planId: plan.id, error: message });
-      try { await markFailed(sql, plan.id, message); } catch (dbError) {
-        console.error("Could not save publishing error", dbError);
+
+      // A publish request can time out after Meta accepted it. Recheck before failing.
+      let shouldWait = false;
+      try {
+        const latest = await graphRequest(containerId, { fields: "status_code,status" }, token, "GET");
+        const latestState = String(latest.status_code || "");
+        if (latestState === "PUBLISHED") {
+          await sql`
+            UPDATE public.content_schedule_plans
+            SET status = 'published', error_message = NULL, updated_at = NOW()
+            WHERE id = ${plan.id} AND status = 'publishing' AND instagram_media_id = ${containerId}
+          `;
+          summary.published++;
+          continue;
+        }
+        if (latestState === "IN_PROGRESS" || !latestState) {
+          shouldWait = true;
+        }
+      } catch (reconcileError) {
+        // The result is ambiguous; preserve the in-flight state rather than risk a duplicate.
+        console.error("Could not reconcile uncertain Instagram publish result", { planId: plan.id, error: reconcileError });
+        shouldWait = true;
       }
-      summary.failed++;
+
+      if (shouldWait) {
+        try {
+          await sql`
+            UPDATE public.content_schedule_plans
+            SET error_message = ${message.slice(0, 2000)}, updated_at = NOW()
+            WHERE id = ${plan.id} AND status = 'publishing' AND instagram_media_id = ${containerId}
+          `;
+        } catch (dbError) {
+          console.error("Could not preserve uncertain publish state", dbError);
+        }
+        summary.waiting++;
+      } else {
+        try { await markFailed(sql, plan.id, message); } catch (dbError) {
+          console.error("Could not save publishing error", dbError);
+        }
+        summary.failed++;
+      }
     }
   }
 
