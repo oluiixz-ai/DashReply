@@ -14,6 +14,9 @@ export default function ContentStudio() {
   const [showVerifiedBadge, setShowVerifiedBadge] = useState(true);
   const [draftStatus, setDraftStatus] = useState("");
   const [captionCopyStatus, setCaptionCopyStatus] = useState("");
+  const [showScheduleForm, setShowScheduleForm] = useState(false);
+  const [scheduledAt, setScheduledAt] = useState("");
+  const [scheduleStatus, setScheduleStatus] = useState("");
   const [renderStatus, setRenderStatus] = useState("");
   const [renderedUrl, setRenderedUrl] = useState("");
   const [isRendering, setIsRendering] = useState(false);
@@ -175,6 +178,34 @@ export default function ContentStudio() {
     }
   }
 
+  function saveSchedulePlan() {
+    if (!renderedUrl) { setScheduleStatus("Renderize e baixe o vídeo antes de planejar a publicação."); return; }
+    if (!scheduledAt) { setScheduleStatus("Escolha a data e o horário desejados."); return; }
+    const scheduledDate = new Date(scheduledAt);
+    if (Number.isNaN(scheduledDate.getTime()) || scheduledDate.getTime() <= Date.now()) {
+      setScheduleStatus("Escolha um horário futuro."); return;
+    }
+    try {
+      const key = "dashreply-scheduled-plans";
+      const existing = JSON.parse(localStorage.getItem(key) || "[]");
+      const plans = Array.isArray(existing) ? existing : [];
+      plans.push({
+        id: `plan-${Date.now()}`,
+        profileName,
+        handle,
+        captionText,
+        scheduledAt: scheduledDate.toISOString(),
+        videoFileName: videoName,
+        createdAt: new Date().toISOString(),
+        status: "planejado"
+      });
+      localStorage.setItem(key, JSON.stringify(plans));
+      setScheduleStatus("Planejamento salvo neste navegador. Isso não publica automaticamente no Instagram.");
+    } catch {
+      setScheduleStatus("Não foi possível salvar o planejamento neste navegador.");
+    }
+  }
+
   function selectVideo(file?: File) {
     if (!file) return;
     if (!file.type.startsWith("video/")) return;
@@ -245,8 +276,9 @@ export default function ContentStudio() {
         {isRendering && <div className="space-y-1.5"><div className="h-2 overflow-hidden rounded-full bg-zinc-800"><div className="h-full rounded-full bg-violet-500 transition-all" style={{width: `${renderProgress}%`}} /></div><p className="text-right text-[11px] text-zinc-500">{renderProgress > 0 ? `${renderProgress}% do vídeo` : "Iniciando vídeo..."}</p></div>}
         {renderedUrl && <a href={renderedUrl} download="dashreply-video.webm" className="flex w-full items-center justify-center gap-2 rounded-xl border border-emerald-500/40 px-4 py-3 text-sm font-semibold text-emerald-300 hover:bg-emerald-500/10"><Upload size={16}/>Baixar vídeo renderizado (.webm)</a>}
       </div>
-      <div className="mt-4 grid grid-cols-2 gap-2"><button onClick={()=>videoInput.current?.click()} className="flex items-center justify-center gap-2 rounded-xl border border-zinc-700 px-3 py-2.5 text-xs text-zinc-200 hover:bg-zinc-800"><Video size={15}/>Trocar vídeo</button><button disabled className="flex items-center justify-center gap-2 rounded-xl bg-violet-500/40 px-3 py-2.5 text-xs font-semibold text-white/70" title="Disponível após conectar o renderizador"><CalendarClock size={15}/>Agendar</button></div>
-      <p className="mt-3 text-[11px] leading-5 text-zinc-500">O vídeo selecionado fica nesta prévia local. Ele ainda não é enviado nem publicado.</p>
+      <div className="mt-4 grid grid-cols-2 gap-2"><button onClick={()=>videoInput.current?.click()} className="flex items-center justify-center gap-2 rounded-xl border border-zinc-700 px-3 py-2.5 text-xs text-zinc-200 hover:bg-zinc-800"><Video size={15}/>Trocar vídeo</button><button onClick={()=>{setShowScheduleForm(v=>!v);setScheduleStatus("");}} className="flex items-center justify-center gap-2 rounded-xl bg-violet-500 px-3 py-2.5 text-xs font-semibold text-white hover:bg-violet-400"><CalendarClock size={15}/>Planejar horário</button></div>
+      {showScheduleForm && <div className="mt-3 space-y-3 rounded-xl border border-violet-500/30 bg-violet-500/5 p-3"><p className="text-xs leading-5 text-zinc-300">Escolha quando você pretende publicar. Por enquanto, o horário fica salvo neste navegador e não envia o vídeo ao Instagram.</p><label className="block"><span className="mb-1.5 block text-xs text-zinc-400">Data e horário</span><input type="datetime-local" value={scheduledAt} min={new Date(Date.now()-new Date().getTimezoneOffset()*60000).toISOString().slice(0,16)} onChange={e=>{setScheduledAt(e.target.value);setScheduleStatus("");}} className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-white"/></label><button onClick={saveSchedulePlan} className="w-full rounded-lg bg-violet-500 px-3 py-2.5 text-sm font-semibold text-white hover:bg-violet-400">Salvar planejamento</button>{scheduleStatus && <p role="status" className="text-xs leading-5 text-zinc-300">{scheduleStatus}</p>}</div>}
+      <p className="mt-3 text-[11px] leading-5 text-zinc-500">O vídeo fica no navegador. O planejamento de horário é local; publicação automática ainda não está conectada.</p>
     </aside>
   </section>;
 }
