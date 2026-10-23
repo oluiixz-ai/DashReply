@@ -17,6 +17,7 @@ export default function ContentStudio() {
   const [renderStatus, setRenderStatus] = useState("");
   const [renderedUrl, setRenderedUrl] = useState("");
   const [isRendering, setIsRendering] = useState(false);
+  const [renderProgress, setRenderProgress] = useState(0);
   const previewVideoRef = useRef<HTMLVideoElement>(null);
   const videoInput = useRef<HTMLInputElement>(null);
   const logoInput = useRef<HTMLInputElement>(null);
@@ -28,6 +29,7 @@ export default function ContentStudio() {
       setRenderStatus("A exportação requer um navegador atualizado, como o Chrome."); return;
     }
     setIsRendering(true);
+    setRenderProgress(0);
     setRenderStatus("Preparando a renderização...");
     if (renderedUrl) URL.revokeObjectURL(renderedUrl);
     setRenderedUrl("");
@@ -80,20 +82,34 @@ export default function ContentStudio() {
       const chunks: BlobPart[] = [];
       recorder.ondataavailable = event => { if (event.data.size) chunks.push(event.data); };
       recorder.onerror = () => { setIsRendering(false); setRenderStatus("Falha ao renderizar. Tente um vídeo menor."); };
+      let safetyTimer: ReturnType<typeof setTimeout> | undefined;
       recorder.onstop = () => {
+        if (safetyTimer) clearTimeout(safetyTimer);
         const url = URL.createObjectURL(new Blob(chunks, { type: "video/webm" }));
-        setRenderedUrl(url); setIsRendering(false);
+        setRenderedUrl(url); setIsRendering(false); setRenderProgress(100);
         setRenderStatus("Renderização concluída. Baixe o WebM e confira o áudio antes de publicar.");
         stream.getTracks().forEach(track => track.stop()); video.pause(); video.currentTime = 0;
       };
       recorder.start(250);
       setRenderStatus("Renderizando em tempo real. Mantenha esta aba aberta.");
+      const expectedDuration = Number.isFinite(video.duration) && video.duration > 0 ? video.duration : 60;
+      safetyTimer = setTimeout(() => {
+        if (recorder.state !== "inactive") recorder.stop();
+        setIsRendering(false);
+        setRenderStatus("A renderização demorou mais que o esperado e foi interrompida. Tente novamente com um vídeo menor.");
+      }, Math.min(Math.max(expectedDuration * 1500 + 15000, 45000), 30 * 60 * 1000));
+      video.ontimeupdate = () => {
+        if (Number.isFinite(video.duration) && video.duration > 0) {
+          setRenderProgress(Math.min(99, Math.round((video.currentTime / video.duration) * 100)));
+        }
+      };
       let frame = 0;
       const paint = () => { draw(); if (!video.ended && !video.paused) frame = requestAnimationFrame(paint); };
       video.onended = () => { cancelAnimationFrame(frame); draw(); if (recorder.state !== "inactive") recorder.stop(); };
       await video.play(); paint();
     } catch (error) {
       setIsRendering(false);
+      setRenderProgress(0);
       setRenderStatus(error instanceof Error ? error.message : "Falha ao renderizar o vídeo.");
     }
   }
@@ -192,6 +208,7 @@ export default function ContentStudio() {
       <div className="mt-4 space-y-2">
         <button onClick={renderVideo} disabled={!videoUrl || isRendering} className="flex w-full items-center justify-center gap-2 rounded-xl bg-violet-500 px-4 py-3 text-sm font-semibold text-white transition hover:bg-violet-400 disabled:opacity-50"><WandSparkles size={17}/>{isRendering ? "Renderizando..." : "Renderizar vídeo com template"}</button>
         {renderStatus && <p role="status" className="text-xs leading-5 text-zinc-400">{renderStatus}</p>}
+        {isRendering && <div className="space-y-1.5"><div className="h-2 overflow-hidden rounded-full bg-zinc-800"><div className="h-full rounded-full bg-violet-500 transition-all" style={{width: `${renderProgress}%`}} /></div><p className="text-right text-[11px] text-zinc-500">{renderProgress > 0 ? `${renderProgress}% do vídeo` : "Iniciando vídeo..."}</p></div>}
         {renderedUrl && <a href={renderedUrl} download="dashreply-video.webm" className="flex w-full items-center justify-center gap-2 rounded-xl border border-emerald-500/40 px-4 py-3 text-sm font-semibold text-emerald-300 hover:bg-emerald-500/10"><Upload size={16}/>Baixar vídeo renderizado (.webm)</a>}
       </div>
       <div className="mt-4 grid grid-cols-2 gap-2"><button onClick={()=>videoInput.current?.click()} className="flex items-center justify-center gap-2 rounded-xl border border-zinc-700 px-3 py-2.5 text-xs text-zinc-200 hover:bg-zinc-800"><Video size={15}/>Trocar vídeo</button><button disabled className="flex items-center justify-center gap-2 rounded-xl bg-violet-500/40 px-3 py-2.5 text-xs font-semibold text-white/70" title="Disponível após conectar o renderizador"><CalendarClock size={15}/>Agendar</button></div>
