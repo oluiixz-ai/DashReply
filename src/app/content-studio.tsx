@@ -39,21 +39,27 @@ export default function ContentStudio() {
     if (!ctx) { setIsRendering(false); setRenderStatus("Não foi possível iniciar o renderizador."); return; }
     const draw = () => {
       ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, 1080, 1920);
+      // Avatar placeholder: no photo was uploaded, so show a neutral profile silhouette.
+      ctx.fillStyle = "#e5e7eb"; ctx.beginPath(); ctx.arc(48, 78, 34, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = "#9ca3af"; ctx.beginPath(); ctx.arc(48, 67, 11, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.ellipse(48, 91, 19, 12, 0, Math.PI, Math.PI * 2); ctx.fill();
       ctx.fillStyle = "#111"; ctx.font = "bold 46px Arial"; ctx.textAlign = "left";
-      ctx.fillText((profileName || "Nome do perfil").slice(0, 28), 70, 75, 850);
-      if (showVerifiedBadge) { ctx.fillStyle = "#3b82f6"; ctx.beginPath(); ctx.arc(48, 62, 18, 0, Math.PI * 2); ctx.fill(); }
-      ctx.fillStyle = "#555"; ctx.font = "30px Arial"; ctx.fillText((handle || "@seuperfil").slice(0, 40), 70, 125, 900);
+      const displayName = (profileName || "Nome do perfil").slice(0, 28);
+      ctx.fillText(displayName, 100, 75, 760);
+      if (showVerifiedBadge) {
+        const badgeX = Math.min(100 + ctx.measureText(displayName).width + 26, 1010);
+        ctx.fillStyle = "#3897f0"; ctx.beginPath(); ctx.arc(badgeX, 59, 17, 0, Math.PI * 2); ctx.fill();
+        ctx.strokeStyle = "#fff"; ctx.lineWidth = 4; ctx.lineCap = "round"; ctx.lineJoin = "round";
+        ctx.beginPath(); ctx.moveTo(badgeX - 7, 59); ctx.lineTo(badgeX - 2, 64); ctx.lineTo(badgeX + 8, 53); ctx.stroke();
+      }
+      ctx.fillStyle = "#555"; ctx.font = "30px Arial"; ctx.fillText((handle || "@seuperfil").slice(0, 40), 100, 125, 900);
       if (video.readyState >= 2 && video.videoWidth) {
         const top = 170, height = 1280, scale = Math.max(1080 / video.videoWidth, height / video.videoHeight);
         const width = video.videoWidth * scale, vh = video.videoHeight * scale;
         ctx.save(); ctx.beginPath(); ctx.rect(0, top, 1080, height); ctx.clip();
         ctx.drawImage(video, (1080 - width) / 2, top + (height - vh) / 2, width, vh); ctx.restore();
       }
-      if (showSubtitles) {
-        ctx.fillStyle = "rgba(0,0,0,.75)"; ctx.fillRect(40, 1340, 1000, 70);
-        ctx.fillStyle = "#fff"; ctx.font = "bold 30px Arial"; ctx.textAlign = "center";
-        ctx.fillText("Espaço reservado para legendas", 540, 1385, 950);
-      }
+      // Do not draw fake subtitle placeholders; real synchronized subtitles are not implemented yet.
       ctx.fillStyle = "#fff"; ctx.fillRect(0, 1450, 1080, 470);
       ctx.fillStyle = "#111"; ctx.font = "bold 64px Arial"; ctx.textAlign = "center";
       const text = bottomText || "Seu texto de destaque";
