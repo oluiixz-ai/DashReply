@@ -67,11 +67,40 @@ export default function ContentStudio() {
       ctx.textAlign = "left";
     };
     try {
-      video.pause(); video.currentTime = 0;
-      await new Promise((resolve, reject) => {
-        if (video.readyState >= 2) resolve(true);
-        else { video.onloadeddata = () => resolve(true); video.onerror = () => reject(new Error("Não foi possível ler o vídeo.")); }
+      video.pause();
+      setRenderStatus("Verificando o vídeo...");
+      await new Promise<void>((resolve, reject) => {
+        if (video.readyState >= 2 && video.videoWidth > 0) { resolve(); return; }
+        let settled = false;
+        const finish = (error?: Error) => {
+          if (settled) return;
+          settled = true;
+          clearTimeout(timer);
+          video.removeEventListener("loadeddata", onReady);
+          video.removeEventListener("canplay", onReady);
+          video.removeEventListener("error", onError);
+          if (error) reject(error); else resolve();
+        };
+        const onReady = () => {
+          if (video.readyState >= 2 && video.videoWidth > 0) finish();
+        };
+        const onError = () => finish(new Error("O navegador não conseguiu carregar esse arquivo de vídeo. Tente MP4 (H.264)."));
+        const timer = setTimeout(() => finish(new Error("O vídeo não ficou pronto para renderização após 12 segundos. Reimporte o arquivo e tente novamente.")), 12000);
+        video.addEventListener("loadeddata", onReady);
+        video.addEventListener("canplay", onReady);
+        video.addEventListener("error", onError);
+        onReady();
       });
+      video.currentTime = 0;
+      if (video.readyState < 2) {
+        setRenderStatus("Carregando o primeiro quadro do vídeo...");
+        await new Promise<void>((resolve, reject) => {
+          const timer = setTimeout(() => reject(new Error("O vídeo demorou para voltar ao início. Tente reimportá-lo.")), 8000);
+          const onSeeked = () => { clearTimeout(timer); video.removeEventListener("seeked", onSeeked); resolve(); };
+          video.addEventListener("seeked", onSeeked, { once: true });
+        });
+      }
+      setRenderStatus("Preparando o quadro de saída...");
       draw();
       const canvasStream = canvas.captureStream(30);
       const source = video as HTMLVideoElement & { captureStream?: () => MediaStream; mozCaptureStream?: () => MediaStream };
