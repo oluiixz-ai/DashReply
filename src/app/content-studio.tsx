@@ -6,6 +6,10 @@ import { BadgeCheck, CalendarClock, Captions, Check, Copy, FileVideo, ImagePlus,
 export default function ContentStudio() {
   const [videoUrl, setVideoUrl] = useState("");
   const [videoName, setVideoName] = useState("");
+  const [videoFile, setVideoFile] = useState<File | null>(null);
+  const [uploadedVideoUrl, setUploadedVideoUrl] = useState("");
+  const [uploadStatus, setUploadStatus] = useState("");
+  const [isUploading, setIsUploading] = useState(false);
   const [logoUrl, setLogoUrl] = useState("");
   const [profileName, setProfileName] = useState("UnyFlick");
   const [handle, setHandle] = useState("@theunyfliick");
@@ -198,26 +202,58 @@ export default function ContentStudio() {
     if (Number.isNaN(scheduledDate.getTime()) || scheduledDate.getTime() <= Date.now()) {
       setScheduleStatus("Escolha um horário futuro."); return;
     }
-    setScheduleStatus("Salvando no banco de dados...");
+    setScheduleStatus("Verificando armazenamento do vídeo...");
     try {
+      let videoUrlForPlan = uploadedVideoUrl;
+      if (!videoUrlForPlan) videoUrlForPlan = await uploadVideoToR2();
+      if (!videoUrlForPlan) { setScheduleStatus("Não foi possível armazenar o vídeo. Confira a mensagem de upload e tente novamente."); return; }
+      setScheduleStatus("Salvando planejamento no banco de dados...");
       const response = await fetch("/api/content-schedule", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ profileName, handle, captionText, scheduledAt: scheduledDate.toISOString(), videoFileName: videoName })
+        body: JSON.stringify({ profileName, handle, captionText, scheduledAt: scheduledDate.toISOString(), videoFileName: videoName, videoUrl: videoUrlForPlan })
       });
       const data = await response.json();
       if (!response.ok) { setScheduleStatus(data.error || "Não foi possível salvar o planejamento."); return; }
       setSavedPlans(current => [...current, data.plan].sort((a,b) => new Date(a.scheduledAt).getTime() - new Date(b.scheduledAt).getTime()));
-      setScheduleStatus("Planejamento salvo no banco de dados. A publicação automática ainda não está conectada.");
+      setScheduleStatus("Vídeo armazenado no R2 e planejamento salvo. A publicação automática no Instagram ainda não está conectada.");
     } catch {
       setScheduleStatus("Falha de conexão ao salvar. Verifique a publicação e tente novamente.");
     }
+  }
+
+  async function uploadVideoToR2(file = videoFile) {
+    if (!file) { setUploadStatus("Selecione um vídeo primeiro."); return ""; }
+    setIsUploading(true);
+    setUploadStatus("Preparando upload seguro...");
+    try {
+      const signed = await fetch("/api/r2-upload", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ filename: file.name, contentType: file.type || "video/mp4", size: file.size })
+      });
+      const details = await signed.json();
+      if (!signed.ok) throw new Error(details.error || "Não foi possível preparar o upload.");
+      setUploadStatus("Enviando vídeo ao Cloudflare R2...");
+      const put = await fetch(details.uploadUrl, { method: "PUT", headers: { "Content-Type": details.contentType }, body: file });
+      if (!put.ok) throw new Error("O Cloudflare recusou o upload (" + put.status + "). Confira a regra CORS e as credenciais R2.");
+      setUploadedVideoUrl(details.publicUrl);
+      setUploadStatus("Vídeo enviado e armazenado no R2.");
+      return details.publicUrl as string;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Falha ao enviar vídeo.";
+      setUploadStatus(message);
+      return "";
+    } finally { setIsUploading(false); }
   }
 
   function selectVideo(file?: File) {
     if (!file) return;
     if (!file.type.startsWith("video/")) return;
     if (videoUrl) URL.revokeObjectURL(videoUrl);
+    setVideoFile(file);
+    setUploadedVideoUrl("");
+    setUploadStatus("");
     setVideoUrl(URL.createObjectURL(file));
     setVideoName(file.name);
   }
@@ -284,7 +320,8 @@ export default function ContentStudio() {
         {isRendering && <div className="space-y-1.5"><div className="h-2 overflow-hidden rounded-full bg-zinc-800"><div className="h-full rounded-full bg-violet-500 transition-all" style={{width: `${renderProgress}%`}} /></div><p className="text-right text-[11px] text-zinc-500">{renderProgress > 0 ? `${renderProgress}% do vídeo` : "Iniciando vídeo..."}</p></div>}
         {renderedUrl && <a href={renderedUrl} download="dashreply-video.webm" className="flex w-full items-center justify-center gap-2 rounded-xl border border-emerald-500/40 px-4 py-3 text-sm font-semibold text-emerald-300 hover:bg-emerald-500/10"><Upload size={16}/>Baixar vídeo renderizado (.webm)</a>}
       </div>
-      <div className="mt-4 grid grid-cols-2 gap-2"><button onClick={()=>videoInput.current?.click()} className="flex items-center justify-center gap-2 rounded-xl border border-zinc-700 px-3 py-2.5 text-xs text-zinc-200 hover:bg-zinc-800"><Video size={15}/>Trocar vídeo</button><button onClick={()=>{setShowScheduleForm(v=>!v);setScheduleStatus("");}} className="flex items-center justify-center gap-2 rounded-xl bg-violet-500 px-3 py-2.5 text-xs font-semibold text-white hover:bg-violet-400"><CalendarClock size={15}/>Planejar horário</button></div>
+      <div className="mt-4 grid grid-cols-2 gap-2"><button onClick={()=>uploadVideoToR2()} disabled={isUploading || !videoFile} className="flex items-center justify-center gap-2 rounded-xl border border-emerald-500/40 px-3 py-2.5 text-xs text-emerald-300 disabled:opacity-50"><Upload size={15}/>{isUploading ? "Enviando..." : uploadedVideoUrl ? "Vídeo na nuvem" : "Enviar para nuvem"}</button><button onClick={()=>videoInput.current?.click()} className="flex items-center justify-center gap-2 rounded-xl border border-zinc-700 px-3 py-2.5 text-xs text-zinc-200 hover:bg-zinc-800"><Video size={15}/>Trocar vídeo</button><button onClick={()=>{setShowScheduleForm(v=>!v);setScheduleStatus("");}} className="flex items-center justify-center gap-2 rounded-xl bg-violet-500 px-3 py-2.5 text-xs font-semibold text-white hover:bg-violet-400"><CalendarClock size={15}/>Planejar horário</button></div>
+      {uploadStatus && <p role="status" className="mt-2 text-xs leading-5 text-zinc-300">{uploadStatus}</p>}
       {savedPlans.length > 0 && <div className="mt-3 rounded-xl border border-zinc-800 p-3"><h3 className="mb-2 text-xs font-semibold text-zinc-200">Planejamentos salvos</h3><div className="space-y-2">{savedPlans.slice(0,5).map(plan => <div key={plan.id} className="rounded-lg bg-zinc-950/70 p-2"><div className="text-xs font-medium text-zinc-200">{new Date(plan.scheduledAt).toLocaleString("pt-BR", {dateStyle:"short",timeStyle:"short"})}</div><div className="mt-1 truncate text-[11px] text-zinc-400">{plan.videoFileName}</div><div className="mt-1 text-[10px] text-violet-300">{plan.status === "planned" ? "Planejado · publicação automática pendente" : plan.status}</div></div>)}</div></div>}
       {showScheduleForm && <div className="mt-3 space-y-3 rounded-xl border border-violet-500/30 bg-violet-500/5 p-3"><p className="text-xs leading-5 text-zinc-300">Escolha quando você pretende publicar. Por enquanto, o horário fica salvo neste navegador e não envia o vídeo ao Instagram.</p><label className="block"><span className="mb-1.5 block text-xs text-zinc-400">Data e horário</span><input type="datetime-local" value={scheduledAt} min={new Date(Date.now()-new Date().getTimezoneOffset()*60000).toISOString().slice(0,16)} onChange={e=>{setScheduledAt(e.target.value);setScheduleStatus("");}} className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-white"/></label><button onClick={saveSchedulePlan} className="w-full rounded-lg bg-violet-500 px-3 py-2.5 text-sm font-semibold text-white hover:bg-violet-400">Salvar planejamento</button>{scheduleStatus && <p role="status" className="text-xs leading-5 text-zinc-300">{scheduleStatus}</p>}</div>}
       <p className="mt-3 text-[11px] leading-5 text-zinc-500">O vídeo fica no navegador. O planejamento de horário é local; publicação automática ainda não está conectada.</p>
