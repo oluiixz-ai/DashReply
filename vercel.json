@@ -3,6 +3,10 @@
     {
       "path": "/api/cron/reconcile-comments",
       "schedule": "0 12 * * *"
+    },
+    {
+      "path": "/api/cron/publish-content-schedule",
+      "schedule": "*/5 * * * *"
     }
   ]
 }
