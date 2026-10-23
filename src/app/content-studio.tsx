@@ -13,8 +13,36 @@ export default function ContentStudio() {
   const [captionText, setCaptionText] = useState("Digite ou cole aqui a legenda do vídeo...");
   const [showSubtitles, setShowSubtitles] = useState(true);
   const [showVerifiedBadge, setShowVerifiedBadge] = useState(true);
+  const [draftStatus, setDraftStatus] = useState("");
   const videoInput = useRef<HTMLInputElement>(null);
   const logoInput = useRef<HTMLInputElement>(null);
+
+  function saveDraft() {
+    const draft = { profileName, handle, bottomText, captionText, showSubtitles, showVerifiedBadge, savedAt: new Date().toISOString() };
+    try {
+      localStorage.setItem("dashreply-content-studio-draft", JSON.stringify(draft));
+      setDraftStatus("Rascunho salvo neste navegador.");
+    } catch {
+      setDraftStatus("Não foi possível salvar o rascunho neste navegador.");
+    }
+  }
+
+  function loadDraft() {
+    try {
+      const raw = localStorage.getItem("dashreply-content-studio-draft");
+      if (!raw) { setDraftStatus("Nenhum rascunho salvo neste navegador."); return; }
+      const draft = JSON.parse(raw);
+      if (typeof draft.profileName === "string") setProfileName(draft.profileName);
+      if (typeof draft.handle === "string") setHandle(draft.handle);
+      if (typeof draft.bottomText === "string") setBottomText(draft.bottomText);
+      if (typeof draft.captionText === "string") setCaptionText(draft.captionText);
+      if (typeof draft.showSubtitles === "boolean") setShowSubtitles(draft.showSubtitles);
+      if (typeof draft.showVerifiedBadge === "boolean") setShowVerifiedBadge(draft.showVerifiedBadge);
+      setDraftStatus("Rascunho carregado. O vídeo e a logo precisam ser selecionados novamente.");
+    } catch {
+      setDraftStatus("Não foi possível carregar o rascunho salvo.");
+    }
+  }
 
   function selectVideo(file?: File) {
     if (!file) return;
@@ -44,6 +72,11 @@ export default function ContentStudio() {
           <label className="block sm:col-span-2"><span className="mb-2 block text-xs font-medium text-zinc-300">Texto de destaque inferior</span><textarea value={bottomText} onChange={e=>setBottomText(e.target.value)} maxLength={180} rows={2} className="w-full resize-y rounded-xl border border-zinc-700 bg-zinc-950 px-3 py-2.5 text-sm text-white outline-none focus:border-violet-500"/></label>
           <label className="block sm:col-span-2"><span className="mb-2 block text-xs font-medium text-zinc-300">Legenda da publicação</span><textarea value={captionText} onChange={e=>setCaptionText(e.target.value)} maxLength={2200} rows={3} className="w-full resize-y rounded-xl border border-zinc-700 bg-zinc-950 px-3 py-2.5 text-sm text-white outline-none focus:border-violet-500"/></label>
         </div>
+        <div className="mt-4 flex flex-wrap gap-2">
+          <button onClick={saveDraft} className="flex items-center justify-center gap-2 rounded-xl border border-violet-500/40 px-4 py-2.5 text-sm font-medium text-violet-200 transition hover:bg-violet-500/10"><Check size={16}/>Salvar rascunho</button>
+          <button onClick={loadDraft} className="flex items-center justify-center gap-2 rounded-xl border border-zinc-700 px-4 py-2.5 text-sm text-zinc-200 transition hover:bg-zinc-800"><Upload size={16}/>Carregar rascunho</button>
+        </div>
+        {draftStatus && <p role="status" className="mt-2 text-xs text-zinc-400">{draftStatus}</p>}
         <div className="mt-4 grid gap-3 sm:grid-cols-2">
           <button onClick={()=>logoInput.current?.click()} className="flex items-center justify-center gap-2 rounded-xl border border-zinc-700 px-4 py-3 text-sm text-zinc-200 transition hover:border-violet-500 hover:bg-violet-500/5"><ImagePlus size={17}/>{logoUrl ? "Trocar logo" : "Enviar logo do perfil"}</button>
           <input ref={logoInput} type="file" accept="image/*" className="hidden" onChange={e=>selectLogo(e.target.files?.[0])}/>
