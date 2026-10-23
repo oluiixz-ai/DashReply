@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { neon } from "@neondatabase/serverless";
+import { neon, type NeonQueryFunction } from "@neondatabase/serverless";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -43,7 +43,7 @@ async function graphRequest(
   return data;
 }
 
-async function markFailed(sql: ReturnType<typeof neon>, planId: string, message: string) {
+async function markFailed(sql: NeonQueryFunction<false, false>, planId: string, message: string) {
   await sql`
     UPDATE public.content_schedule_plans
     SET status = 'failed', error_message = ${message.slice(0, 2000)}, updated_at = NOW()
