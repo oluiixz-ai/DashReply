@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { BadgeCheck, CalendarClock, Check, Copy, FileVideo, ImagePlus, Instagram, LayoutTemplate, Upload, Video, WandSparkles } from "lucide-react";
+import { BadgeCheck, CalendarClock, Captions, Check, Copy, FileVideo, ImagePlus, Instagram, LayoutTemplate, Upload, Video, WandSparkles } from "lucide-react";
 
 export default function ContentStudio() {
   const [videoUrl, setVideoUrl] = useState("");
