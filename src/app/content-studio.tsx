@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { BadgeCheck, CalendarClock, Captions, Check, FileVideo, ImagePlus, Instagram, LayoutTemplate, Upload, Video, WandSparkles } from "lucide-react";
+import { BadgeCheck, CalendarClock, Check, Copy, FileVideo, ImagePlus, Instagram, LayoutTemplate, Upload, Video, WandSparkles } from "lucide-react";
 
 export default function ContentStudio() {
   const [videoUrl, setVideoUrl] = useState("");
@@ -11,9 +11,9 @@ export default function ContentStudio() {
   const [handle, setHandle] = useState("@theunyfliick");
   const [bottomText, setBottomText] = useState("Eles encontram uma piranha pré-histórica 🦈😱");
   const [captionText, setCaptionText] = useState("Digite ou cole aqui a legenda do vídeo...");
-  const [showSubtitles, setShowSubtitles] = useState(true);
   const [showVerifiedBadge, setShowVerifiedBadge] = useState(true);
   const [draftStatus, setDraftStatus] = useState("");
+  const [captionCopyStatus, setCaptionCopyStatus] = useState("");
   const [renderStatus, setRenderStatus] = useState("");
   const [renderedUrl, setRenderedUrl] = useState("");
   const [isRendering, setIsRendering] = useState(false);
@@ -150,7 +150,7 @@ export default function ContentStudio() {
   }
 
   function saveDraft() {
-    const draft = { profileName, handle, bottomText, captionText, showSubtitles, showVerifiedBadge, savedAt: new Date().toISOString() };
+    const draft = { profileName, handle, bottomText, captionText, showVerifiedBadge, savedAt: new Date().toISOString() };
     try {
       localStorage.setItem("dashreply-content-studio-draft", JSON.stringify(draft));
       setDraftStatus("Rascunho salvo neste navegador.");
@@ -168,7 +168,6 @@ export default function ContentStudio() {
       if (typeof draft.handle === "string") setHandle(draft.handle);
       if (typeof draft.bottomText === "string") setBottomText(draft.bottomText);
       if (typeof draft.captionText === "string") setCaptionText(draft.captionText);
-      if (typeof draft.showSubtitles === "boolean") setShowSubtitles(draft.showSubtitles);
       if (typeof draft.showVerifiedBadge === "boolean") setShowVerifiedBadge(draft.showVerifiedBadge);
       setDraftStatus("Rascunho carregado. O vídeo e a logo precisam ser selecionados novamente.");
     } catch {
@@ -202,12 +201,14 @@ export default function ContentStudio() {
           <label className="block"><span className="mb-2 block text-xs font-medium text-zinc-300">Nome do perfil</span><input value={profileName} onChange={e=>setProfileName(e.target.value)} maxLength={60} className="w-full rounded-xl border border-zinc-700 bg-zinc-950 px-3 py-2.5 text-sm text-white outline-none focus:border-violet-500"/></label>
           <label className="block"><span className="mb-2 block text-xs font-medium text-zinc-300">Usuário (@)</span><input value={handle} onChange={e=>setHandle(e.target.value)} maxLength={60} className="w-full rounded-xl border border-zinc-700 bg-zinc-950 px-3 py-2.5 text-sm text-white outline-none focus:border-violet-500"/></label>
           <label className="block sm:col-span-2"><span className="mb-2 block text-xs font-medium text-zinc-300">Texto de destaque inferior</span><textarea value={bottomText} onChange={e=>setBottomText(e.target.value)} maxLength={180} rows={2} className="w-full resize-y rounded-xl border border-zinc-700 bg-zinc-950 px-3 py-2.5 text-sm text-white outline-none focus:border-violet-500"/></label>
-          <label className="block sm:col-span-2"><span className="mb-2 block text-xs font-medium text-zinc-300">Legenda da publicação</span><textarea value={captionText} onChange={e=>setCaptionText(e.target.value)} maxLength={2200} rows={3} className="w-full resize-y rounded-xl border border-zinc-700 bg-zinc-950 px-3 py-2.5 text-sm text-white outline-none focus:border-violet-500"/></label>
+          <label className="block sm:col-span-2"><span className="mb-2 block text-xs font-medium text-zinc-300">Legenda da publicação (descrição do Reel)</span><textarea value={captionText} onChange={e=>{setCaptionText(e.target.value);setCaptionCopyStatus("");}} maxLength={2200} rows={4} placeholder="Escreva a descrição que acompanhará o Reel no Instagram, com emojis e hashtags..." className="w-full resize-y rounded-xl border border-zinc-700 bg-zinc-950 px-3 py-2.5 text-sm text-white outline-none focus:border-violet-500"/><span className="mt-1 block text-xs text-zinc-500">{captionText.length}/2200 caracteres · Não aparece dentro do vídeo.</span></label>
         </div>
         <div className="mt-4 flex flex-wrap gap-2">
+          <button onClick={async()=>{try{await navigator.clipboard.writeText(captionText);setCaptionCopyStatus("Legenda copiada! Cole no Instagram ao publicar.");}catch{setCaptionCopyStatus("Não foi possível copiar automaticamente. Selecione o texto e copie manualmente.");}}} className="flex items-center justify-center gap-2 rounded-xl border border-emerald-500/40 px-4 py-2.5 text-sm font-medium text-emerald-200 transition hover:bg-emerald-500/10"><Copy size={16}/>Copiar legenda</button>
           <button onClick={saveDraft} className="flex items-center justify-center gap-2 rounded-xl border border-violet-500/40 px-4 py-2.5 text-sm font-medium text-violet-200 transition hover:bg-violet-500/10"><Check size={16}/>Salvar rascunho</button>
           <button onClick={loadDraft} className="flex items-center justify-center gap-2 rounded-xl border border-zinc-700 px-4 py-2.5 text-sm text-zinc-200 transition hover:bg-zinc-800"><Upload size={16}/>Carregar rascunho</button>
         </div>
+        {captionCopyStatus && <p role="status" className="mt-2 text-xs text-emerald-300">{captionCopyStatus}</p>}
         {draftStatus && <p role="status" className="mt-2 text-xs text-zinc-400">{draftStatus}</p>}
         <div className="mt-4 grid gap-3 sm:grid-cols-2">
           <button onClick={()=>logoInput.current?.click()} className="flex items-center justify-center gap-2 rounded-xl border border-zinc-700 px-4 py-3 text-sm text-zinc-200 transition hover:border-violet-500 hover:bg-violet-500/5"><ImagePlus size={17}/>{logoUrl ? "Trocar logo" : "Enviar logo do perfil"}</button>
@@ -221,7 +222,6 @@ export default function ContentStudio() {
       <div className="rounded-2xl border border-zinc-800 bg-[#111114] p-5 md:p-6">
         <div className="mb-4 flex items-center gap-3"><div className="flex h-10 w-10 items-center justify-center rounded-xl bg-sky-500/10 text-sky-300"><Captions size={20}/></div><div><h2 className="font-semibold text-white">Legendas e publicação</h2><p className="mt-1 text-sm text-zinc-400">Prepare o texto que acompanhará o vídeo.</p></div></div>
         <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-zinc-800 bg-zinc-950/60 p-4"><input type="checkbox" checked={showVerifiedBadge} onChange={e=>setShowVerifiedBadge(e.target.checked)} className="mt-1 accent-violet-500"/><span><span className="block text-sm font-medium text-zinc-200">Exibir selo de verificado</span><span className="mt-1 block text-xs leading-5 text-zinc-500">Mostra ou oculta o ícone azul ao lado do nome na prévia.</span></span></label>
-        <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-zinc-800 bg-zinc-950/60 p-4"><input type="checkbox" checked={showSubtitles} onChange={e=>setShowSubtitles(e.target.checked)} className="mt-1 accent-violet-500"/><span><span className="block text-sm font-medium text-zinc-200">Reservar espaço para legendas no vídeo</span><span className="mt-1 block text-xs leading-5 text-zinc-500">A geração e a sincronização automática de legendas serão conectadas à etapa de renderização.</span></span></label>
         <div className="mt-4 rounded-xl border border-amber-500/20 bg-amber-500/5 p-4 text-xs leading-5 text-amber-100/80">Esta primeira versão prepara a prévia e os campos do template. Renderização final, salvamento permanente e agendamento ainda precisam ser conectados ao processamento e à API oficial de publicação.</div>
       </div>
     </div>
@@ -235,7 +235,6 @@ export default function ContentStudio() {
         </div>
         <div className="relative aspect-[9/11] overflow-hidden bg-zinc-900">
           {videoUrl ? <video ref={previewVideoRef} src={videoUrl} controls playsInline className="h-full w-full object-cover"/> : <div className="flex h-full flex-col items-center justify-center gap-3 px-5 text-center text-white"><FileVideo size={38} className="text-zinc-500"/><span className="text-sm font-medium">Seu vídeo aparecerá aqui</span><span className="text-xs text-zinc-500">Importe um arquivo para ver a prévia</span></div>}
-          {videoUrl && showSubtitles && <div className="pointer-events-none absolute bottom-5 left-3 right-3 text-center"><span className="rounded bg-black/75 px-2 py-1 text-xs font-bold text-white">Prévia das legendas</span></div>}
         </div>
         <div className="min-h-[104px] px-4 py-5"><div className="text-center text-[17px] font-extrabold leading-snug">{bottomText || "Seu texto de destaque"}</div></div>
       </div>
