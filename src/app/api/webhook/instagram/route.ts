@@ -84,13 +84,18 @@ export async function POST(request: Request) {
   }
 
   const entries = Array.isArray(body?.entry) ? body.entry : [];
-  const changes = entries.flatMap((entry: any) =>
-    (Array.isArray(entry?.changes) ? entry.changes : []).map((change: any) => ({
+  const changes = entries.flatMap((entry: any) => [
+    ...(Array.isArray(entry?.changes) ? entry.changes.map((change: any) => ({
       entryId: entry.id,
       field: String(change.field ?? "instagram_event"),
       value: change.value ?? {},
-    })),
-  );
+    })) : []),
+    ...(Array.isArray(entry?.messaging) ? entry.messaging.map((messageEvent: any) => ({
+      entryId: entry.id,
+      field: "messages",
+      value: messageEvent ?? {},
+    })) : []),
+  ]);
 
   console.info("Instagram webhook accepted", {
     object: body?.object ?? null,
@@ -129,6 +134,32 @@ export async function POST(request: Request) {
         continue;
       }
       recorded += 1;
+
+      // Button clicks advance the configured DM flow.
+      if (item.field === "messages") {
+        const payload = String(value?.postback?.payload ?? value?.message?.quick_reply?.payload ?? "");
+        const sender = value?.sender?.id ? String(value.sender.id) : "";
+        const match = payload.match(/^DASHREPLY_FLOW_(\d+)$/);
+        if (match && sender && sendingEnabled) {
+          const automationId = Number(match[1]);
+          const [config] = await db.select().from(configuracoes).where(eq(configuracoes.chave, "automation_link_button_" + automationId)).limit(1);
+          if (config?.valor) {
+            const flow = JSON.parse(config.valor) as { secondMessage?: string; secondButtonText?: string; secondButtonUrl?: string };
+            const secondText = String(flow.secondMessage ?? "").trim();
+            const buttonText = String(flow.secondButtonText ?? "").trim();
+            const buttonUrl = String(flow.secondButtonUrl ?? "").trim();
+            if (secondText && buttonText && /^https:\/\//i.test(buttonUrl)) {
+              const result = await graphPost(encodeURIComponent(await getInstagramAccountId() ?? "") + "/messages", await getInstagramAccessToken() ?? "", {
+                recipient: { id: sender },
+                message: { attachment: { type: "template", payload: { template_type: "generic", elements: [{ title: secondText.slice(0, 80), subtitle: secondText.slice(0, 80), buttons: [{ type: "web_url", url: buttonUrl, title: buttonText }] }] } } },
+              });
+              if (result.ok) sent += 1;
+              else console.warn("Instagram second DM failed", { automationId, status: result.status, message: result.body?.error?.message ?? "API error" });
+            }
+          }
+        }
+        continue;
+      }
 
       if (item.field !== "comments" || !textValue || !commentId) continue;
 
@@ -208,8 +239,13 @@ export async function POST(request: Request) {
           console.error("Saved automation flow invalid", { automationId: rule.id, error });
         }
       }
-      const publicText = flowRows[0]?.valor ? flowPublicText : rule.respostaPublica?.trim() ?? "";
-      const directText = flowRows[0]?.valor ? flowDirectText : rule.mensagemDirect?.trim() ?? "";
+      const chooseVariation = (value: string | null | undefined) => {
+        const options = String(value ?? "").split(/\r?\n/).map((item) => item.trim()).filter(Boolean);
+        if (!options.length) return "";
+        return options[Math.floor(Math.random() * options.length)];
+      };
+      const publicText = chooseVariation(flowRows[0]?.valor ? flowPublicText : rule.respostaPublica);
+      const directText = chooseVariation(flowRows[0]?.valor ? flowDirectText : rule.mensagemDirect);
       if (!sendingEnabled || (!publicText && !directText) || flowUnsupported) {
         await db.update(eventos).set({
           automacaoId: rule.id,
@@ -243,14 +279,23 @@ export async function POST(request: Request) {
         else failures.push(`Resposta pública HTTP ${result.status}: ${String(result.body?.error?.message ?? "erro da API")}`);
       }
 
-      // Instagram Private Replies: one private reply per comment, using comment_id as recipient.
+      // Initial private reply includes a quick-reply button that advances to the configured second DM.
       if (directText) {
-        const result = await graphPost(`${encodeURIComponent(accountId)}/messages`, accessToken, {
+        const [flowConfig] = await db.select().from(configuracoes).where(eq(configuracoes.chave, "automation_link_button_" + rule.id)).limit(1);
+        let initialMessage: Record<string, unknown> = { text: directText };
+        if (flowConfig?.valor) {
+          try {
+            const flow = JSON.parse(flowConfig.valor) as { firstButtonText?: string };
+            const title = String(flow.firstButtonText ?? "").trim();
+            if (title) initialMessage = { text: directText, quick_replies: [{ content_type: "text", title: title.slice(0, 20), payload: "DASHREPLY_FLOW_" + rule.id }] };
+          } catch {}
+        }
+        const result = await graphPost(encodeURIComponent(accountId) + "/messages", accessToken, {
           recipient: { comment_id: commentId },
-          message: { text: directText },
+          message: initialMessage,
         });
         if (result.ok) sentAny = true;
-        else failures.push(`DM privada HTTP ${result.status}: ${String(result.body?.error?.message ?? "erro da API")}`);
+        else failures.push("DM privada HTTP " + result.status + ": " + String(result.body?.error?.message ?? "erro da API"));
       }
 
       const finalStatus = failures.length ? (sentAny ? "partially_sent" : "send_failed") : "sent";

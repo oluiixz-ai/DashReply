@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { desc, inArray } from "drizzle-orm";
 import { getSession } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { automacoes, eventos } from "@/lib/db/schema";
+import { automacoes, configuracoes, eventos } from "@/lib/db/schema";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -61,6 +61,16 @@ export async function POST(request: Request) {
   const palavraChave = typeof input.palavraChave === "string" ? input.palavraChave.trim() : "";
   const respostaPublica = typeof input.respostaPublica === "string" ? input.respostaPublica.trim() : "";
   const mensagemDirect = typeof input.mensagemDirect === "string" ? input.mensagemDirect.trim() : "";
+  const dmFlow = input.dmFlow && typeof input.dmFlow === "object" ? input.dmFlow as Record<string, unknown> : null;
+  const firstButtonText = typeof dmFlow?.firstButtonText === "string" ? dmFlow.firstButtonText.trim() : "";
+  const secondMessage = typeof dmFlow?.secondMessage === "string" ? dmFlow.secondMessage.trim() : "";
+  const secondButtonText = typeof dmFlow?.secondButtonText === "string" ? dmFlow.secondButtonText.trim() : "";
+  const secondButtonUrl = typeof dmFlow?.secondButtonUrl === "string" ? dmFlow.secondButtonUrl.trim() : "";
+  if (dmFlow && mensagemDirect && (!firstButtonText || !secondMessage || !secondButtonText || !secondButtonUrl || !secondButtonUrl.startsWith("https://") || firstButtonText.length > 20 || secondButtonText.length > 20 || secondMessage.length > 2000)) {
+    return NextResponse.json({ error: "Preencha as duas mensagens, os textos dos botões (até 20 caracteres) e uma URL HTTPS válida." }, { status: 400 });
+  }
+  const publicVariations = respostaPublica.split(/\r?\n/).map((item) => item.trim()).filter(Boolean);
+  if (publicVariations.length < 3) return NextResponse.json({ error: "Informe pelo menos 3 variações de resposta pública, uma por linha." }, { status: 400 });
   if (respostaPublica.length > 1000 || mensagemDirect.length > 2000) {
     return NextResponse.json({ error: "A resposta pública deve ter até 1.000 caracteres e a DM até 2.000." }, { status: 400 });
   }
@@ -77,6 +87,9 @@ export async function POST(request: Request) {
       mensagemDirect: mensagemDirect || null,
       ativa: false,
     }).returning();
+    if (dmFlow && (firstButtonText || secondMessage || secondButtonText || secondButtonUrl)) {
+      await db.insert(configuracoes).values({ chave: "automation_link_button_" + row.id, valor: JSON.stringify({ firstButtonText, secondMessage, secondButtonText, secondButtonUrl }) });
+    }
     return NextResponse.json({ automation: toClient(row) }, { status: 201 });
   } catch (error) {
     console.error("Falha ao criar automação", error);
