@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { desc, inArray } from "drizzle-orm";
 import { getSession } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { automacoes, eventos } from "@/lib/db/schema";
+import { automacoes, configuracoes, eventos } from "@/lib/db/schema";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
