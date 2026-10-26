@@ -61,6 +61,9 @@ export async function POST(request: Request) {
   const palavraChave = typeof input.palavraChave === "string" ? input.palavraChave.trim() : "";
   const respostaPublica = typeof input.respostaPublica === "string" ? input.respostaPublica.trim() : "";
   const mensagemDirect = typeof input.mensagemDirect === "string" ? input.mensagemDirect.trim() : "";
+  const escopo = input.escopo === "specific_post" ? "specific_post" : "all_posts";
+  const postId = typeof input.postId === "string" ? input.postId.trim() : "";
+  if (escopo === "specific_post" && !postId) return NextResponse.json({ error: "Selecione uma publicação para esta automação." }, { status: 400 });
   const dmFlow = input.dmFlow && typeof input.dmFlow === "object" ? input.dmFlow as Record<string, unknown> : null;
   const firstButtonText = typeof dmFlow?.firstButtonText === "string" ? dmFlow.firstButtonText.trim() : "";
   const secondMessage = typeof dmFlow?.secondMessage === "string" ? dmFlow.secondMessage.trim() : "";
@@ -82,7 +85,8 @@ export async function POST(request: Request) {
       nome,
       palavraChave,
       tipoCorrespondencia: "contains",
-      escopo: "all_posts",
+      escopo,
+      postId: escopo === "specific_post" ? postId : null,
       respostaPublica: respostaPublica || null,
       mensagemDirect: mensagemDirect || null,
       ativa: false,
