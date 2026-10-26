@@ -61,6 +61,20 @@ export async function POST(request: Request) {
   const palavraChave = typeof input.palavraChave === "string" ? input.palavraChave.trim() : "";
   const respostaPublica = typeof input.respostaPublica === "string" ? input.respostaPublica.trim() : "";
   const mensagemDirect = typeof input.mensagemDirect === "string" ? input.mensagemDirect.trim() : "";
+  const rawLinkButton = input.linkButton && typeof input.linkButton === "object" ? input.linkButton as Record<string, unknown> : null;
+  const linkButton = rawLinkButton ? {
+    selectionButtonText: typeof rawLinkButton.selectionButtonText === "string" ? rawLinkButton.selectionButtonText.trim() : "",
+    followupMessage: typeof rawLinkButton.followupMessage === "string" ? rawLinkButton.followupMessage.trim() : "",
+    linkButtonText: typeof rawLinkButton.linkButtonText === "string" ? rawLinkButton.linkButtonText.trim() : "",
+    linkButtonUrl: typeof rawLinkButton.linkButtonUrl === "string" ? rawLinkButton.linkButtonUrl.trim() : "",
+  } : null;
+  if (linkButton) {
+    let parsedUrl: URL | null = null;
+    try { parsedUrl = new URL(linkButton.linkButtonUrl); } catch { /* validated below */ }
+    if (!linkButton.selectionButtonText || linkButton.selectionButtonText.length > 20 || !linkButton.followupMessage || linkButton.followupMessage.length > 1000 || !linkButton.linkButtonText || linkButton.linkButtonText.length > 20 || !parsedUrl || parsedUrl.protocol !== "https:") {
+      return NextResponse.json({ error: "Configure os dois textos de botão, a mensagem de acompanhamento e uma URL HTTPS válida. Os textos dos botões devem ter até 20 caracteres." }, { status: 400 });
+    }
+  }
   if (respostaPublica.length > 1000 || mensagemDirect.length > 2000) {
     return NextResponse.json({ error: "A resposta pública deve ter até 1.000 caracteres e a DM até 2.000." }, { status: 400 });
   }
@@ -77,6 +91,12 @@ export async function POST(request: Request) {
       mensagemDirect: mensagemDirect || null,
       ativa: false,
     }).returning();
+    if (row && linkButton) {
+      await db.insert(configuracoes).values({ chave: "automation_link_button_" + row.id, valor: JSON.stringify(linkButton), atualizadoEm: new Date() }).onConflictDoUpdate({
+        target: configuracoes.chave,
+        set: { valor: JSON.stringify(linkButton), atualizadoEm: new Date() },
+      });
+    }
     return NextResponse.json({ automation: toClient(row) }, { status: 201 });
   } catch (error) {
     console.error("Falha ao criar automação", error);
