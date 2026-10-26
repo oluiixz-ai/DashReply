@@ -143,7 +143,7 @@ export default function Home({ initialSection = "Visão geral" }: { initialSecti
   async function createAutomation(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     if (!name.trim() || !keyword.trim() || saving) return;
-    if (publicReply.split(/\\r?\\n/).map(value => value.trim()).filter(Boolean).length < 3) { setNotice("Informe pelo menos 3 variações de resposta pública, uma por linha."); return; }
+    if (publicReply.split(/\r?\n/).map(value => value.trim()).filter(Boolean).length < 3) { setNotice("Informe pelo menos 3 variações de resposta pública, uma por linha."); return; }
     if (directMessage.trim() && (!firstButtonText.trim() || !secondMessage.trim() || !secondButtonText.trim() || !secondButtonUrl.trim())) { setNotice("Para usar o fluxo no Direct, preencha a primeira mensagem, o texto do primeiro botão, a segunda mensagem, o texto do segundo botão e a URL."); return; }
     setSaving(true);
     setNotice("");
