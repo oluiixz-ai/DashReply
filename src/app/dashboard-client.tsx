@@ -151,12 +151,12 @@ export default function Home({ initialSection = "Visão geral" }: { initialSecti
       const response = await fetch("/api/automacoes", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ nome: name.trim(), palavraChave: keyword.trim(), respostaPublica: publicReply.trim() || null, mensagemDirect: directMessage.trim() || null }),
+        body: JSON.stringify({ nome: name.trim(), palavraChave: keyword.trim(), respostaPublica: publicReply.trim() || null, mensagemDirect: directMessage.trim() || null, dmFlow: { firstButtonText: firstButtonText.trim(), secondMessage: secondMessage.trim(), secondButtonText: secondButtonText.trim(), secondButtonUrl: secondButtonUrl.trim() } }),
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "Não foi possível salvar a automação.");
       setAutomations(prev => [data.automation, ...prev]);
-      setName(""); setKeyword(""); setPublicReply(""); setDirectMessage(""); setShowModal(false); setActive("Automações");
+      setName(""); setKeyword(""); setPublicReply(""); setDirectMessage(""); setFirstButtonText("Ver detalhes"); setSecondMessage(""); setSecondButtonText("Acessar link"); setSecondButtonUrl(""); setShowModal(false); setActive("Automações");
       setNotice("Automação salva no banco de dados como rascunho. Configure a integração oficial da Meta antes de ativar envios reais.");
     } catch (error) {
       setNotice(error instanceof Error ? error.message : "Erro ao salvar automação.");
