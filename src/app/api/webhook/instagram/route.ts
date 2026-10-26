@@ -135,47 +135,8 @@ export async function POST(request: Request) {
       }
       recorded += 1;
 
-      // A quick-reply selection in the first DM triggers a second DM containing a URL button.
-      if (item.field === "messages") {
-        const messageEvent = value as Record<string, any>;
-        const payload = messageEvent.message?.quick_reply?.payload;
-        const sender = messageEvent.sender?.id;
-        const match = typeof payload === "string" ? payload.match(/^DASHREPLY_LINK_(\d+)$/) : null;
-        if (match && sender) {
-          const [settings] = await db.select().from(configuracoes)
-            .where(eq(configuracoes.chave, "automation_link_button_" + match[1])).limit(1);
-          if (settings?.valor) {
-            try {
-              const cta = JSON.parse(settings.valor) as { followupMessage?: string; linkButtonText?: string; linkButtonUrl?: string };
-              const followupMessage = String(cta.followupMessage ?? "").trim();
-              const linkButtonText = String(cta.linkButtonText ?? "").trim();
-              const linkButtonUrl = String(cta.linkButtonUrl ?? "").trim();
-              const url = new URL(linkButtonUrl);
-              if (followupMessage && linkButtonText && url.protocol === "https:") {
-                const accessToken = await getInstagramAccessToken();
-                const accountId = await getInstagramAccountId();
-                if (accessToken && accountId) {
-                  const result = await graphPost(encodeURIComponent(accountId) + "/messages", accessToken, {
-                    recipient: { id: String(sender) },
-                    message: { attachment: { type: "template", payload: { template_type: "generic", elements: [{
-                      title: followupMessage.slice(0, 80),
-                      buttons: [{ type: "web_url", url: url.toString(), title: linkButtonText.slice(0, 20) }],
-                    }] } } },
-                  });
-                  await db.update(eventos).set({
-                    status: result.ok ? "sent" : "send_failed",
-                    erro: result.ok ? null : ("DM com link HTTP " + result.status + ": " + String(result.body?.error?.message ?? "erro da API")).slice(0, 4000),
-                  }).where(eq(eventos.id, inserted.id));
-                  console.info("Instagram follow-up link button result", { ok: result.ok, automationId: Number(match[1]) });
-                }
-              }
-            } catch (error) {
-              console.error("Failed to send Instagram link button follow-up", { message: error instanceof Error ? error.message : "Unknown error" });
-            }
-          }
-        }
-        continue;
-      }
+      // Message events are recorded only; the optional multi-step link flow is disabled for now.
+      if (item.field === "messages") continue;
 
       if (item.field !== "comments" || !textValue || !commentId) continue;
 
@@ -255,8 +216,13 @@ export async function POST(request: Request) {
           console.error("Saved automation flow invalid", { automationId: rule.id, error });
         }
       }
-      const publicText = flowRows[0]?.valor ? flowPublicText : rule.respostaPublica?.trim() ?? "";
-      const directText = flowRows[0]?.valor ? flowDirectText : rule.mensagemDirect?.trim() ?? "";
+      const chooseVariation = (value: string | null | undefined) => {
+        const options = String(value ?? "").split(/\r?\n/).map((item) => item.trim()).filter(Boolean);
+        if (!options.length) return "";
+        return options[Math.floor(Math.random() * options.length)];
+      };
+      const publicText = chooseVariation(flowRows[0]?.valor ? flowPublicText : rule.respostaPublica);
+      const directText = chooseVariation(flowRows[0]?.valor ? flowDirectText : rule.mensagemDirect);
       if (!sendingEnabled || (!publicText && !directText) || flowUnsupported) {
         await db.update(eventos).set({
           automacaoId: rule.id,
@@ -290,21 +256,11 @@ export async function POST(request: Request) {
         else failures.push(`Resposta pública HTTP ${result.status}: ${String(result.body?.error?.message ?? "erro da API")}`);
       }
 
-      // Instagram Private Replies: send the first DM and, when configured, include a quick-reply selection.
+      // Instagram Private Reply: send only the initial DM. The follow-up link flow is disabled for now.
       if (directText) {
-        let quickReplies: Array<{ content_type: "text"; title: string; payload: string }> = [];
-        const [linkButtonSettings] = await db.select().from(configuracoes)
-          .where(eq(configuracoes.chave, "automation_link_button_" + rule.id)).limit(1);
-        if (linkButtonSettings?.valor) {
-          try {
-            const cta = JSON.parse(linkButtonSettings.valor) as { selectionButtonText?: string };
-            const title = String(cta.selectionButtonText ?? "").trim().slice(0, 20);
-            if (title) quickReplies = [{ content_type: "text", title, payload: "DASHREPLY_LINK_" + rule.id }];
-          } catch { /* Ignore invalid optional CTA settings and send plain text. */ }
-        }
         const result = await graphPost(encodeURIComponent(accountId) + "/messages", accessToken, {
           recipient: { comment_id: commentId },
-          message: { text: directText, ...(quickReplies.length ? { quick_replies: quickReplies } : {}) },
+          message: { text: directText },
         });
         if (result.ok) sentAny = true;
         else failures.push("DM privada HTTP " + result.status + ": " + String(result.body?.error?.message ?? "erro da API"));
