@@ -139,7 +139,7 @@ export async function POST(request: Request) {
       if (item.field === "messages") {
         const payload = String(value?.postback?.payload ?? value?.message?.quick_reply?.payload ?? "");
         const sender = value?.sender?.id ? String(value.sender.id) : "";
-        const match = payload.match(/^DASHREPLY_FLOW_(\\d+)$/);
+        const match = payload.match(/^DASHREPLY_FLOW_(\d+)$/);
         if (match && sender && sendingEnabled) {
           const automationId = Number(match[1]);
           const [config] = await db.select().from(configuracoes).where(eq(configuracoes.chave, "automation_link_button_" + automationId)).limit(1);
@@ -148,7 +148,7 @@ export async function POST(request: Request) {
             const secondText = String(flow.secondMessage ?? "").trim();
             const buttonText = String(flow.secondButtonText ?? "").trim();
             const buttonUrl = String(flow.secondButtonUrl ?? "").trim();
-            if (secondText && buttonText && /^https:\\/\\//i.test(buttonUrl)) {
+            if (secondText && buttonText && /^https:\/\/\//i.test(buttonUrl)) {
               const result = await graphPost(encodeURIComponent(await getInstagramAccountId() ?? "") + "/messages", await getInstagramAccessToken() ?? "", {
                 recipient: { id: sender },
                 message: { attachment: { type: "template", payload: { template_type: "generic", elements: [{ title: secondText.slice(0, 80), subtitle: secondText.slice(0, 80), buttons: [{ type: "web_url", url: buttonUrl, title: buttonText }] }] } } },
