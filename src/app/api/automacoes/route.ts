@@ -61,6 +61,8 @@ export async function POST(request: Request) {
   const palavraChave = typeof input.palavraChave === "string" ? input.palavraChave.trim() : "";
   const respostaPublica = typeof input.respostaPublica === "string" ? input.respostaPublica.trim() : "";
   const mensagemDirect = typeof input.mensagemDirect === "string" ? input.mensagemDirect.trim() : "";
+  const publicVariations = respostaPublica.split(/\\r?\\n/).map((item) => item.trim()).filter(Boolean);
+  if (publicVariations.length < 3) return NextResponse.json({ error: "Informe pelo menos 3 variações de resposta pública, uma por linha." }, { status: 400 });
   if (respostaPublica.length > 1000 || mensagemDirect.length > 2000) {
     return NextResponse.json({ error: "A resposta pública deve ter até 1.000 caracteres e a DM até 2.000." }, { status: 400 });
   }
