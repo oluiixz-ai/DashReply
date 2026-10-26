@@ -69,6 +69,7 @@ export async function POST(request: Request) {
     linkButtonUrl: typeof rawLinkButton.linkButtonUrl === "string" ? rawLinkButton.linkButtonUrl.trim() : "",
   } : null;
   if (linkButton) {
+    if (!mensagemDirect) return NextResponse.json({ error: "Preencha a mensagem inicial da DM para mostrar o botão de seleção." }, { status: 400 });
     let parsedUrl: URL | null = null;
     try { parsedUrl = new URL(linkButton.linkButtonUrl); } catch { /* validated below */ }
     if (!linkButton.selectionButtonText || linkButton.selectionButtonText.length > 20 || !linkButton.followupMessage || linkButton.followupMessage.length > 1000 || !linkButton.linkButtonText || linkButton.linkButtonText.length > 20 || !parsedUrl || parsedUrl.protocol !== "https:") {
