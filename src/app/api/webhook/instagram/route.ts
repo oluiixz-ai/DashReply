@@ -148,7 +148,7 @@ export async function POST(request: Request) {
             const secondText = String(flow.secondMessage ?? "").trim();
             const buttonText = String(flow.secondButtonText ?? "").trim();
             const buttonUrl = String(flow.secondButtonUrl ?? "").trim();
-            if (secondText && buttonText && /^https:\/\/\//i.test(buttonUrl)) {
+            if (secondText && buttonText && /^https:\/\//i.test(buttonUrl)) {
               const result = await graphPost(encodeURIComponent(await getInstagramAccountId() ?? "") + "/messages", await getInstagramAccessToken() ?? "", {
                 recipient: { id: sender },
                 message: { attachment: { type: "template", payload: { template_type: "generic", elements: [{ title: secondText.slice(0, 80), subtitle: secondText.slice(0, 80), buttons: [{ type: "web_url", url: buttonUrl, title: buttonText }] }] } } },
