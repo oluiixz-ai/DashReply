@@ -277,3 +277,38 @@ html[data-theme="light"] .automation-modal-panel .text-amber-200\\/80 { color: #
 html[data-theme="dark"] .automation-modal-panel { background: #121215 !important; border-color: #3f3f46 !important; color: #f4f4f5 !important; }
 html[data-theme="dark"] .automation-modal-panel .bg-zinc-950 { background: #09090b !important; }
 html[data-theme="dark"] .automation-modal-panel .border-zinc-700 { border-color: #3f3f46 !important; }
+
+
+/* Existing automations list (not the create-automation dialog). */
+.automation-list { min-width: 0; }
+.automation-list-table-wrap { max-width: 100%; -webkit-overflow-scrolling: touch; }
+.automation-list-table th, .automation-list-table td { vertical-align: middle; }
+.automation-list-table td { overflow-wrap: anywhere; }
+.automation-list-table td:last-child { min-width: 190px; }
+.automation-list-table button { flex-shrink: 0; }
+html[data-theme="dark"] .automation-list { background: #111114 !important; border-color: #30303a !important; }
+html[data-theme="dark"] .automation-list .border-slate-100,
+html[data-theme="dark"] .automation-list .border-slate-200 { border-color: #30303a !important; }
+html[data-theme="dark"] .automation-list .text-slate-900 { color: #f4f4f5 !important; }
+html[data-theme="dark"] .automation-list .text-slate-700,
+html[data-theme="dark"] .automation-list .text-slate-600 { color: #d4d4d8 !important; }
+html[data-theme="dark"] .automation-list .text-slate-500,
+html[data-theme="dark"] .automation-list .text-slate-400 { color: #a1a1aa !important; }
+html[data-theme="dark"] .automation-list .bg-slate-50,
+html[data-theme="dark"] .automation-list .bg-\\[\\#f5f7fc\\] { background: #18181b !important; }
+html[data-theme="dark"] .automation-list .bg-white { background: #111114 !important; }
+html[data-theme="dark"] .automation-list .hover\\:bg-violet-50\\/50:hover { background: #1c1828 !important; }
+html[data-theme="dark"] .automation-list .bg-violet-50 { background: #241a38 !important; }
+html[data-theme="dark"] .automation-list .text-violet-700 { color: #c4b5fd !important; }
+html[data-theme="dark"] .automation-list .bg-sky-50 { background: #102334 !important; }
+html[data-theme="dark"] .automation-list .text-sky-600 { color: #7dd3fc !important; }
+html[data-theme="dark"] .automation-list .border-violet-100 { border-color: #44305f !important; }
+html[data-theme="dark"] .automation-list .border-slate-200 { border-color: #30303a !important; }
+html[data-theme="dark"] .automation-list input { background: #18181b !important; color: #f4f4f5 !important; }
+html[data-theme="light"] .automation-list { background: #fff !important; color: #172033 !important; }
+@media (max-width: 639px) {
+  .automation-list-table { min-width: 720px; }
+  .automation-list-table td, .automation-list-table th { padding-left: 0.75rem; padding-right: 0.75rem; }
+  .automation-list-table td:last-child { min-width: 190px; }
+  .automation-list > .flex:last-child { gap: 0.75rem; flex-wrap: wrap; }
+}
