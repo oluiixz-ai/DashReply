@@ -188,3 +188,11 @@ html[data-theme="light"] main .text-red-400 { color: #b91c1c !important; }
 html[data-theme="light"] main .bg-emerald-500\/10 { background: #d1fae5 !important; }
 html[data-theme="light"] main .bg-amber-500\/10 { background: #fef3c7 !important; }
 html[data-theme="light"] main .bg-red-500\/10 { background: #fee2e2 !important; }
+
+/* Mobile/PWA ergonomics: safe areas and touch-friendly scrolling. */
+html { min-height: 100%; -webkit-text-size-adjust: 100%; }
+body { min-height: 100dvh; padding-bottom: env(safe-area-inset-bottom); }
+button, a, input, select, textarea { touch-action: manipulation; }
+@supports (padding: max(0px)) {
+  body { padding-left: env(safe-area-inset-left); padding-right: env(safe-area-inset-right); }
+}
