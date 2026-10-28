@@ -22,9 +22,10 @@ export default function ThemeToggle() {
     setTheme(next);
     document.documentElement.dataset.theme = next;
     window.localStorage.setItem("dashreply-theme", next);
+    document.querySelector('meta[name="theme-color"]')?.setAttribute("content", next === "dark" ? "#09090b" : "#f3f5fb");
   }
 
-  return <button type="button" onClick={toggleTheme} aria-label={theme === "dark" ? "Ativar tema claro" : "Ativar tema escuro"} title={theme === "dark" ? "Ativar tema claro" : "Ativar tema escuro"} className="inline-flex shrink-0 items-center justify-center gap-2 rounded-lg border border-zinc-700 px-2.5 py-1.5 text-xs font-medium text-zinc-200 transition hover:border-violet-400 hover:bg-zinc-800">
+  return <button type="button" onClick={toggleTheme} aria-label={theme === "dark" ? "Ativar tema claro" : "Ativar tema escuro"} title={theme === "dark" ? "Ativar tema claro" : "Ativar tema escuro"} className="theme-toggle inline-flex shrink-0 items-center justify-center gap-2 rounded-lg border px-2.5 py-1.5 text-xs font-medium transition">
     {theme === "dark" ? <Sun size={16} /> : <Moon size={16} />}
     <span>{ready ? (theme === "dark" ? "Tema claro" : "Tema escuro") : "Tema"}</span>
   </button>;
