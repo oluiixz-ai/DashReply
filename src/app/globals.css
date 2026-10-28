@@ -196,3 +196,11 @@ button, a, input, select, textarea { touch-action: manipulation; }
 @supports (padding: max(0px)) {
   body { padding-left: env(safe-area-inset-left); padding-right: env(safe-area-inset-right); }
 }
+
+/* Keep the dashboard controls below the iPhone status bar/notch in Safari and installed PWA. */
+.dashboard-topbar {
+  padding-top: calc(0.5rem + env(safe-area-inset-top, 0px)) !important;
+}
+@supports (height: 100dvh) {
+  html, body { min-height: 100dvh; }
+}
