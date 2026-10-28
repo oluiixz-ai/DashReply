@@ -249,3 +249,31 @@ html[data-theme="light"] .text-slate-800 { color: #172033 !important; }
 html[data-theme="light"] .text-slate-700 { color: #334155 !important; }
 html[data-theme="light"] .text-slate-600 { color: #526078 !important; }
 html[data-theme="light"] .border-slate-200 { border-color: #e0e6f0 !important; }
+
+
+/* Automation modal: responsive spacing and complete theme coverage. */
+.automation-modal-panel { width: min(100%, 42rem); }
+.automation-modal-panel label, .automation-modal-panel input, .automation-modal-panel textarea, .automation-modal-panel select { min-width: 0; }
+.automation-modal-panel textarea { max-width: 100%; }
+@media (max-width: 639px) {
+  .automation-modal-shell { padding-top: max(0.5rem, env(safe-area-inset-top)); padding-bottom: max(0.5rem, env(safe-area-inset-bottom)); }
+  .automation-modal-panel { border-radius: 1rem; }
+  .automation-modal-panel .grid { min-width: 0; }
+  .automation-modal-actions button { min-height: 44px; }
+}
+html[data-theme="light"] .automation-modal-panel { background: #fff !important; border-color: #dbe2ee !important; color: #172033 !important; }
+html[data-theme="light"] .automation-modal-panel .text-zinc-100,
+html[data-theme="light"] .automation-modal-panel .text-zinc-200 { color: #172033 !important; }
+html[data-theme="light"] .automation-modal-panel .text-zinc-300 { color: #334155 !important; }
+html[data-theme="light"] .automation-modal-panel .text-zinc-400,
+html[data-theme="light"] .automation-modal-panel .text-zinc-500 { color: #64748b !important; }
+html[data-theme="light"] .automation-modal-panel .bg-zinc-950 { background: #f8fafc !important; }
+html[data-theme="light"] .automation-modal-panel .border-zinc-700 { border-color: #d5dce8 !important; }
+html[data-theme="light"] .automation-modal-panel .hover\\:bg-zinc-800:hover { background: #eef2f8 !important; }
+html[data-theme="light"] .automation-modal-panel .bg-violet-500\\/5 { background: #faf7ff !important; }
+html[data-theme="light"] .automation-modal-panel .text-violet-200,
+html[data-theme="light"] .automation-modal-panel .text-violet-300 { color: #6d28d9 !important; }
+html[data-theme="light"] .automation-modal-panel .text-amber-200\\/80 { color: #92400e !important; }
+html[data-theme="dark"] .automation-modal-panel { background: #121215 !important; border-color: #3f3f46 !important; color: #f4f4f5 !important; }
+html[data-theme="dark"] .automation-modal-panel .bg-zinc-950 { background: #09090b !important; }
+html[data-theme="dark"] .automation-modal-panel .border-zinc-700 { border-color: #3f3f46 !important; }
