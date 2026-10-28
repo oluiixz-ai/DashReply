@@ -1,0 +1,20 @@
+{
+  "name": "DashReply — Automação para Instagram",
+  "short_name": "DashReply",
+  "description": "Gerencie automações, comentários, mensagens e contatos do Instagram.",
+  "lang": "pt-BR",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#09090b",
+  "theme_color": "#6d28d9",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
