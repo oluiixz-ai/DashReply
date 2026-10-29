@@ -312,3 +312,14 @@ html[data-theme="light"] .automation-list { background: #fff !important; color: 
   .automation-list-table td:last-child { min-width: 190px; }
   .automation-list > .flex:last-child { gap: 0.75rem; flex-wrap: wrap; }
 }
+
+
+/* Media selector modal: isolate touch/scroll from the page behind it on iOS and mobile browsers. */
+.media-selector-overlay { overscroll-behavior: contain; touch-action: none; padding-top: max(0.5rem, env(safe-area-inset-top)); padding-bottom: max(0.5rem, env(safe-area-inset-bottom)); }
+.media-selector-panel { min-height: 0; overscroll-behavior: contain; touch-action: pan-y; -webkit-overflow-scrolling: touch; }
+.media-selector-panel > .flex-1 { min-height: 0; }
+.media-selector-panel label { -webkit-tap-highlight-color: transparent; }
+@media (max-width: 639px) {
+  .media-selector-panel { border-radius: 1rem; }
+  .media-selector-panel button { min-height: 42px; }
+}
