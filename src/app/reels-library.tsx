@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { ExternalLink, Instagram, Plus, RefreshCw, Trash2, Users, Video, ShieldCheck, Search } from "lucide-react";
+import { ExternalLink, Instagram, Plus, RefreshCw, Trash2, Users, Video, ShieldCheck } from "lucide-react";
 
 type SourceProfile = { username: string; url: string; addedAt: string; status: "pending"; };
 
@@ -49,7 +49,7 @@ export default function ReelsLibrary() {
       const response = await fetch("/api/reels/library", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(profile) });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "Não foi possível adicionar o perfil.");
-      setProfiles(data.profiles || []); setValue(""); setNotice(`@ ${profile.username} foi adicionado à sua biblioteca.`.replace("@ ", "@"));
+      setProfiles(data.profiles || []); setValue(""); setNotice(`@${profile.username} foi adicionado à sua biblioteca.`);
     } catch (e) { setError(e instanceof Error ? e.message : "Falha ao salvar."); }
     finally { setSaving(false); }
   }
