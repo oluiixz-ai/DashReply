@@ -1,4 +1,5 @@
 import { jwtVerify } from "jose";
+import { createHash } from "node:crypto";
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { configuracoes } from "@/lib/db/schema";
@@ -69,11 +70,12 @@ export async function GET(request: Request) {
       return redirect(request, "error", "Nenhuma conta profissional do Instagram vinculada a uma Página do Facebook foi encontrada. Vincule a conta e tente novamente.");
     }
 
+    const userKey = createHash("sha256").update(verified.payload.email).digest("hex").slice(0, 32);
     const entries = [
-      { chave: "reels_discovery_access_token", valor: accessToken },
-      { chave: "reels_discovery_account_id", valor: String(connectedPage.instagram_business_account.id) },
-      { chave: "reels_discovery_username", valor: String(connectedPage.instagram_business_account.username || "") },
-      { chave: "reels_discovery_page_name", valor: String(connectedPage.name || "") },
+      { chave: `reels_discovery_access_token:${userKey}`, valor: accessToken },
+      { chave: `reels_discovery_account_id:${userKey}`, valor: String(connectedPage.instagram_business_account.id) },
+      { chave: `reels_discovery_username:${userKey}`, valor: String(connectedPage.instagram_business_account.username || "") },
+      { chave: `reels_discovery_page_name:${userKey}`, valor: String(connectedPage.name || "") },
     ];
     for (const entry of entries) {
       await db.insert(configuracoes).values({ ...entry, atualizadoEm: new Date() }).onConflictDoUpdate({
