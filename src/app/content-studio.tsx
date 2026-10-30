@@ -25,6 +25,7 @@ export default function ContentStudio() {
   const [savedPlans, setSavedPlans] = useState<Array<{id:string; profileName:string; handle:string; captionText:string; scheduledAt:string; videoFileName:string; status:string}>>([]);
   const [renderStatus, setRenderStatus] = useState("");
   const [renderedUrl, setRenderedUrl] = useState("");
+  const [renderedBlob, setRenderedBlob] = useState<Blob | null>(null);
   const [isRendering, setIsRendering] = useState(false);
   const [renderProgress, setRenderProgress] = useState(0);
   const previewVideoRef = useRef<HTMLVideoElement>(null);
@@ -42,6 +43,7 @@ export default function ContentStudio() {
     setRenderStatus("Preparando a renderização...");
     if (renderedUrl) URL.revokeObjectURL(renderedUrl);
     setRenderedUrl("");
+    setRenderedBlob(null);
     const canvas = document.createElement("canvas");
     canvas.width = 1080; canvas.height = 1920;
     const ctx = canvas.getContext("2d");
@@ -129,7 +131,9 @@ export default function ContentStudio() {
       const source = video as HTMLVideoElement & { captureStream?: () => MediaStream; mozCaptureStream?: () => MediaStream };
       const sourceStream = source.captureStream?.() || source.mozCaptureStream?.();
       const stream = new MediaStream([...canvasStream.getVideoTracks(), ...(sourceStream?.getAudioTracks() || [])]);
-      const mime = MediaRecorder.isTypeSupported("video/webm;codecs=vp9,opus") ? "video/webm;codecs=vp9,opus" : "video/webm";
+      const mimeCandidates = ["video/mp4;codecs=avc1.42E01E,mp4a.40.2", "video/mp4"];
+      const mime = mimeCandidates.find(candidate => MediaRecorder.isTypeSupported(candidate));
+      if (!mime) { stream.getTracks().forEach(track => track.stop()); throw new Error("Este navegador não consegue exportar MP4 diretamente. Use Chrome atualizado com suporte a MediaRecorder MP4 ou importe um MP4 já renderizado."); }
       const recorder = new MediaRecorder(stream, { mimeType: mime });
       const chunks: BlobPart[] = [];
       recorder.ondataavailable = event => { if (event.data.size) chunks.push(event.data); };
@@ -137,9 +141,10 @@ export default function ContentStudio() {
       let safetyTimer: ReturnType<typeof setTimeout> | undefined;
       recorder.onstop = () => {
         if (safetyTimer) clearTimeout(safetyTimer);
-        const url = URL.createObjectURL(new Blob(chunks, { type: "video/webm" }));
-        setRenderedUrl(url); setIsRendering(false); setRenderProgress(100);
-        setRenderStatus("Renderização concluída. Baixe o WebM e confira o áudio antes de publicar.");
+        const output = new Blob(chunks, { type: "video/mp4" });
+        const url = URL.createObjectURL(output);
+        setRenderedBlob(output); setRenderedUrl(url); setIsRendering(false); setRenderProgress(100);
+        setRenderStatus("Renderização MP4 concluída. Este arquivo renderizado será usado no agendamento.");
         stream.getTracks().forEach(track => track.stop()); video.pause(); video.currentTime = 0;
       };
       recorder.start(250);
@@ -207,6 +212,7 @@ export default function ContentStudio() {
 
   async function saveSchedulePlan() {
     if (!videoName) { setScheduleStatus("Selecione um vídeo antes de planejar a publicação."); return; }
+    if (!renderedBlob || renderedBlob.type !== "video/mp4") { setScheduleStatus("Renderize o vídeo em MP4 antes de agendar. O agendamento usa o vídeo final com o template aplicado."); return; }
     if (!scheduledAt) { setScheduleStatus("Escolha a data e o horário desejados."); return; }
     const scheduledDate = new Date(scheduledAt);
     if (Number.isNaN(scheduledDate.getTime()) || scheduledDate.getTime() <= Date.now()) {
@@ -214,19 +220,19 @@ export default function ContentStudio() {
     }
     setScheduleStatus("Verificando armazenamento do vídeo...");
     try {
-      let videoUrlForPlan = uploadedVideoUrl;
-      if (!videoUrlForPlan) videoUrlForPlan = await uploadVideoToR2();
+      const renderedFile = new File([renderedBlob], `${videoName.replace(/\\.[^.]+$/, "")}-dashreply.mp4`, { type: "video/mp4" });
+      const videoUrlForPlan = await uploadVideoToR2(renderedFile);
       if (!videoUrlForPlan) { setScheduleStatus("Não foi possível armazenar o vídeo. Confira a mensagem de upload e tente novamente."); return; }
       setScheduleStatus("Salvando planejamento no banco de dados...");
       const response = await fetch("/api/content-schedule", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ profileName, handle, captionText, scheduledAt: scheduledDate.toISOString(), videoFileName: videoName, videoUrl: videoUrlForPlan })
+        body: JSON.stringify({ profileName, handle, captionText, scheduledAt: scheduledDate.toISOString(), videoFileName: renderedFile.name, videoUrl: videoUrlForPlan })
       });
       const data = await response.json();
       if (!response.ok) { setScheduleStatus(data.error || "Não foi possível salvar o planejamento."); return; }
       setSavedPlans(current => [...current, data.plan].sort((a,b) => new Date(a.scheduledAt).getTime() - new Date(b.scheduledAt).getTime()));
-      setScheduleStatus("Vídeo armazenado no R2 e planejamento salvo. A publicação automática no Instagram ainda não está conectada.");
+      setScheduleStatus("Vídeo final MP4 armazenado no R2 e agendamento salvo. A publicação ocorrerá pelo processador automático configurado.");
     } catch {
       setScheduleStatus("Falha de conexão ao salvar. Verifique a publicação e tente novamente.");
     }
@@ -330,7 +336,7 @@ export default function ContentStudio() {
         <button onClick={renderVideo} disabled={isRendering} className="flex w-full items-center justify-center gap-2 rounded-xl bg-violet-500 px-4 py-3 text-sm font-semibold text-white transition hover:bg-violet-400 disabled:cursor-wait disabled:opacity-50"><WandSparkles size={17}/>{isRendering ? "Renderizando..." : "Renderizar vídeo com template"}</button>
         {renderStatus && <p role="status" className="text-xs leading-5 text-zinc-400">{renderStatus}</p>}
         {isRendering && <div className="space-y-1.5"><div className="h-2 overflow-hidden rounded-full bg-zinc-800"><div className="h-full rounded-full bg-violet-500 transition-all" style={{width: `${renderProgress}%`}} /></div><p className="text-right text-[11px] text-zinc-500">{renderProgress > 0 ? `${renderProgress}% do vídeo` : "Iniciando vídeo..."}</p></div>}
-        {renderedUrl && <a href={renderedUrl} download="dashreply-video.webm" className="flex w-full items-center justify-center gap-2 rounded-xl border border-emerald-500/40 px-4 py-3 text-sm font-semibold text-emerald-300 hover:bg-emerald-500/10"><Upload size={16}/>Baixar vídeo renderizado (.webm)</a>}
+        {renderedUrl && <a href={renderedUrl} download="dashreply-video.mp4" className="flex w-full items-center justify-center gap-2 rounded-xl border border-emerald-500/40 px-4 py-3 text-sm font-semibold text-emerald-300 hover:bg-emerald-500/10"><Upload size={16}/>Baixar vídeo renderizado (.mp4)</a>}
       </div>
       <div className="mt-4 grid grid-cols-2 gap-2"><button onClick={()=>uploadVideoToR2()} disabled={isUploading || !videoFile} className="flex items-center justify-center gap-2 rounded-xl border border-emerald-500/40 px-3 py-2.5 text-xs text-emerald-300 disabled:opacity-50"><Upload size={15}/>{isUploading ? "Enviando..." : uploadedVideoUrl ? "Vídeo na nuvem" : "Enviar para nuvem"}</button><button onClick={()=>videoInput.current?.click()} className="flex items-center justify-center gap-2 rounded-xl border border-zinc-700 px-3 py-2.5 text-xs text-zinc-200 hover:bg-zinc-800"><Video size={15}/>Trocar vídeo</button><button onClick={()=>{setShowScheduleForm(v=>!v);setScheduleStatus("");}} className="flex items-center justify-center gap-2 rounded-xl bg-violet-500 px-3 py-2.5 text-xs font-semibold text-white hover:bg-violet-400"><CalendarClock size={15}/>Planejar horário</button></div>
       {uploadStatus && <p role="status" className="mt-2 text-xs leading-5 text-zinc-300">{uploadStatus}</p>}
