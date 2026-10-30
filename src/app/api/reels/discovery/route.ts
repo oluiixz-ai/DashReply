@@ -1,77 +1,117 @@
 import { NextResponse } from "next/server";
-import { eq } from "drizzle-orm";
-import { createHash } from "node:crypto";
 import { getSession } from "@/lib/auth";
-import { db } from "@/lib/db";
-import { configuracoes } from "@/lib/db/schema";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+export const maxDuration = 60;
 
-async function setting(key: string) {
-  if (!db) return null;
-  const [row] = await db.select({ valor: configuracoes.valor }).from(configuracoes).where(eq(configuracoes.chave, key)).limit(1);
-  return row?.valor || null;
+type AnyRecord = Record<string, any>;
+const USERNAME_RE = /^[a-z0-9._]{1,30}$/;
+
+function firstString(...values: unknown[]): string | null {
+  for (const value of values) if (typeof value === "string" && value.trim()) return value;
+  return null;
+}
+function listFrom(payload: AnyRecord): AnyRecord[] {
+  const candidates = [payload?.reels, payload?.data?.reels, payload?.data?.items, payload?.items, payload?.data, payload?.results];
+  return candidates.find(Array.isArray) || [];
+}
+function normalize(item: AnyRecord, index: number) {
+  const mediaUrl = firstString(item.video_url, item.videoUrl, item.media_url, item.mediaUrl, item.video, item.download_url, item.url);
+  const thumbnailUrl = firstString(item.thumbnail_url, item.thumbnailUrl, item.display_url, item.displayUrl, item.cover_url, item.image_url, item.thumbnail);
+  const permalink = firstString(item.permalink, item.permalink_url, item.url, item.shortcode ? `https://www.instagram.com/reel/${item.shortcode}/` : null);
+  const timestamp = firstString(item.taken_at, item.timestamp, item.date, item.created_at, item.takenAt);
+  return {
+    id: String(item.id ?? item.pk ?? item.shortcode ?? permalink ?? index),
+    caption: firstString(item.caption, item.text, item.title) || "",
+    mediaType: "VIDEO",
+    mediaUrl,
+    thumbnailUrl,
+    permalink,
+    timestamp,
+    provider: typeof item.provider === "string" ? item.provider : undefined,
+    views: typeof item.play_count === "number" ? item.play_count : typeof item.view_count === "number" ? item.view_count : null,
+  };
+}
+async function fetchInstaloader(username: string) {
+  const base = process.env.INSTALOADER_SERVICE_URL?.replace(/\/$/, "");
+  const token = process.env.INSTALOADER_SERVICE_TOKEN;
+  if (!base || !token) throw new Error("Instaloader não configurado");
+  const response = await fetch(`${base}/reels`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
+    body: JSON.stringify({ handle: username, limit: 18 }),
+    cache: "no-store",
+    signal: AbortSignal.timeout(35000),
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(typeof payload?.detail === "string" ? payload.detail : `Instaloader respondeu ${response.status}`);
+  const rows = Array.isArray(payload?.reels) ? payload.reels : [];
+  return rows.map((item: AnyRecord, index: number) => normalize({ ...item, provider: "Instaloader" }, index)).filter((item: ReturnType<typeof normalize>) => item.mediaUrl || item.thumbnailUrl || item.permalink);
+}
+async function fetchInScrape(username: string) {
+  const key = process.env.INSCRAPE_API_KEY || process.env.INSCRAPE_KEY;
+  if (!key) throw new Error("InScrape não configurado");
+  const url = new URL("https://api.inscrape.dev/v1/instagram/reels");
+  url.searchParams.set("handle", username);
+  const response = await fetch(url, {
+    headers: { "x-api-key": key, "Accept": "application/json" },
+    cache: "no-store",
+    signal: AbortSignal.timeout(25000),
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const code = payload?.error?.code || payload?.code;
+    throw new Error(code === "INSUFFICIENT_CREDITS" || response.status === 402
+      ? "Os créditos gratuitos do InScrape acabaram."
+      : typeof payload?.error?.message === "string" ? payload.error.message : `InScrape respondeu ${response.status}`);
+  }
+  const rows = listFrom(payload);
+  return rows.map((item, index) => normalize({ ...item, provider: "InScrape" }, index)).filter((item: ReturnType<typeof normalize>) => item.mediaUrl || item.thumbnailUrl || item.permalink);
 }
 
 export async function GET(request: Request) {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: "Não autenticado." }, { status: 401 });
+  const username = new URL(request.url).searchParams.get("username")?.trim().replace(/^@/, "").toLowerCase();
+  const configured = Boolean((process.env.INSTALOADER_SERVICE_URL && process.env.INSTALOADER_SERVICE_TOKEN) || process.env.INSCRAPE_API_KEY || process.env.INSCRAPE_KEY);
+  if (!username) return NextResponse.json({ connected: configured, providers: {
+    instaloader: Boolean(process.env.INSTALOADER_SERVICE_URL && process.env.INSTALOADER_SERVICE_TOKEN),
+    inscrape: Boolean(process.env.INSCRAPE_API_KEY || process.env.INSCRAPE_KEY),
+  } });
+  if (!USERNAME_RE.test(username)) return NextResponse.json({ error: "Nome de usuário inválido." }, { status: 400 });
+  if (!configured) return NextResponse.json({ error: "Configure INSCRAPE_API_KEY e/ou o serviço Instaloader para ativar a busca." }, { status: 503 });
+
+  const failures: string[] = [];
+  const providers: string[] = [];
   try {
-    const userKey = createHash("sha256").update(session.email).digest("hex").slice(0, 32);
-    const accessToken = await setting(`reels_discovery_access_token:${userKey}`);
-    const accountId = await setting(`reels_discovery_account_id:${userKey}`);
-    const connectedUsername = await setting(`reels_discovery_username:${userKey}`);
-    const pageName = await setting(`reels_discovery_page_name:${userKey}`);
-    const username = new URL(request.url).searchParams.get("username")?.trim().replace(/^@/, "").toLowerCase();
-
-    if (!accessToken || !accountId) {
-      return NextResponse.json({ connected: false, error: "Conecte uma conta profissional vinculada a uma Página do Facebook para habilitar a descoberta oficial." }, { status: 200 });
+    if (process.env.INSTALOADER_SERVICE_URL && process.env.INSTALOADER_SERVICE_TOKEN) {
+      try {
+        const media = await fetchInstaloader(username);
+        if (media.length) providers.push("Instaloader");
+        if (media.length) return NextResponse.json({ connected: true, profile: { username }, media, provider: "Instaloader", fallbackUsed: false });
+        failures.push("Instaloader não encontrou Reels nesta consulta.");
+      } catch (error) {
+        failures.push(error instanceof Error ? error.message : "Falha no Instaloader.");
+        console.warn("Instaloader provider failed; trying InScrape.", failures[failures.length - 1]);
+      }
     }
-    if (!username) return NextResponse.json({ connected: true, connectedUsername, pageName });
-    if (!/^[a-z0-9._]{1,30}$/.test(username)) return NextResponse.json({ error: "Nome de usuário inválido." }, { status: 400 });
-
-    const fields = "username,name,biography,profile_picture_url,followers_count,media_count,media.limit(15){id,caption,media_type,media_url,thumbnail_url,permalink,timestamp}";
-    const graphUrl = new URL(`https://graph.facebook.com/v26.0/${encodeURIComponent(accountId)}`);
-    graphUrl.searchParams.set("fields", `business_discovery.username(${username}){${fields}}`);
-    graphUrl.searchParams.set("access_token", accessToken);
-    const response = await fetch(graphUrl, { cache: "no-store" });
-    const payload = await response.json().catch(() => ({}));
-    if (!response.ok || payload?.error || !payload?.business_discovery) {
-      const code = payload?.error?.code;
-      const message = typeof payload?.error?.message === "string" ? payload.error.message : "";
-      console.error("Instagram Business Discovery failed", { status: response.status, code, message });
-      const personalAccountHint = code === 100 || code === 10
-        ? " A descoberta oficial só retorna contas profissionais públicas (Empresa ou Criador); perfis pessoais, privados ou não elegíveis não são compatíveis."
-        : "";
-      return NextResponse.json({ error: (message || "A Meta não retornou dados para este perfil.") + personalAccountHint, code }, { status: 422 });
+    if (process.env.INSCRAPE_API_KEY || process.env.INSCRAPE_KEY) {
+      try {
+        const media = await fetchInScrape(username);
+        if (media.length) providers.push("InScrape");
+        return NextResponse.json({
+          connected: true, profile: { username }, media, provider: "InScrape",
+          fallbackUsed: Boolean(process.env.INSTALOADER_SERVICE_URL && process.env.INSTALOADER_SERVICE_TOKEN),
+          note: failures.length ? "A busca foi concluída pelo provedor alternativo." : undefined,
+        });
+      } catch (error) {
+        failures.push(error instanceof Error ? error.message : "Falha no InScrape.");
+      }
     }
-
-    const profile = payload.business_discovery;
-    const media = Array.isArray(profile.media?.data) ? profile.media.data : [];
-    return NextResponse.json({
-      connected: true,
-      profile: {
-        username: profile.username,
-        name: profile.name,
-        biography: profile.biography,
-        profilePictureUrl: profile.profile_picture_url,
-        followersCount: profile.followers_count,
-        mediaCount: profile.media_count,
-      },
-      media: media.map((item: any) => ({
-        id: String(item.id),
-        caption: typeof item.caption === "string" ? item.caption : "",
-        mediaType: typeof item.media_type === "string" ? item.media_type : "UNKNOWN",
-        mediaUrl: typeof item.media_url === "string" ? item.media_url : null,
-        thumbnailUrl: typeof item.thumbnail_url === "string" ? item.thumbnail_url : null,
-        permalink: typeof item.permalink === "string" ? item.permalink : null,
-        timestamp: typeof item.timestamp === "string" ? item.timestamp : null,
-      })),
-      note: "A Meta pode omitir o arquivo de mídia em alguns resultados. A disponibilidade do link não concede direitos de reutilização.",
-    });
+    return NextResponse.json({ error: `Não foi possível consultar @${username}. ${failures.join(" ")}` }, { status: 502 });
   } catch (error) {
-    console.error("Reels discovery request failed", error);
-    return NextResponse.json({ error: "Não foi possível consultar a Biblioteca de Reels." }, { status: 500 });
+    console.error("Reels discovery failed", error);
+    return NextResponse.json({ error: "Não foi possível consultar este perfil agora." }, { status: 500 });
   }
 }
