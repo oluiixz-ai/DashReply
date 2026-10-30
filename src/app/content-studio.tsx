@@ -131,21 +131,68 @@ export default function ContentStudio() {
       const source = video as HTMLVideoElement & { captureStream?: () => MediaStream; mozCaptureStream?: () => MediaStream };
       const sourceStream = source.captureStream?.() || source.mozCaptureStream?.();
       const stream = new MediaStream([...canvasStream.getVideoTracks(), ...(sourceStream?.getAudioTracks() || [])]);
-      const mimeCandidates = ["video/mp4;codecs=avc1.42E01E,mp4a.40.2", "video/mp4"];
+      const mimeCandidates = [
+        "video/mp4;codecs=avc1.42E01E,mp4a.40.2",
+        "video/mp4",
+        "video/webm;codecs=vp9,opus",
+        "video/webm;codecs=vp8,opus",
+        "video/webm"
+      ];
       const mime = mimeCandidates.find(candidate => MediaRecorder.isTypeSupported(candidate));
-      if (!mime) { stream.getTracks().forEach(track => track.stop()); throw new Error("Este navegador não consegue exportar MP4 diretamente. Use Chrome atualizado com suporte a MediaRecorder MP4 ou importe um MP4 já renderizado."); }
+      if (!mime) { stream.getTracks().forEach(track => track.stop()); throw new Error("Este navegador não oferece um formato de gravação compatível."); }
       const recorder = new MediaRecorder(stream, { mimeType: mime });
       const chunks: BlobPart[] = [];
       recorder.ondataavailable = event => { if (event.data.size) chunks.push(event.data); };
-      recorder.onerror = () => { setIsRendering(false); setRenderStatus("Falha ao renderizar. Tente um vídeo menor."); };
-      let safetyTimer: ReturnType<typeof setTimeout> | undefined;
-      recorder.onstop = () => {
+      recorder.onerror = () => {
         if (safetyTimer) clearTimeout(safetyTimer);
-        const output = new Blob(chunks, { type: "video/mp4" });
-        const url = URL.createObjectURL(output);
-        setRenderedBlob(output); setRenderedUrl(url); setIsRendering(false); setRenderProgress(100);
-        setRenderStatus("Renderização MP4 concluída. Este arquivo renderizado será usado no agendamento.");
-        stream.getTracks().forEach(track => track.stop()); video.pause(); video.currentTime = 0;
+        stream.getTracks().forEach(track => track.stop());
+        setIsRendering(false);
+        setRenderStatus("Falha ao renderizar. Tente um vídeo menor.");
+      };
+      let safetyTimer: ReturnType<typeof setTimeout> | undefined;
+      recorder.onstop = async () => {
+        if (safetyTimer) clearTimeout(safetyTimer);
+        stream.getTracks().forEach(track => track.stop());
+        video.pause();
+        video.currentTime = 0;
+        try {
+          const recorded = new Blob(chunks, { type: recorder.mimeType || mime });
+          let output = recorded;
+          if (!recorded.type.toLowerCase().includes("mp4")) {
+            setRenderStatus("Convertendo o vídeo para MP4. Isso pode levar alguns minutos...");
+            const { FFmpeg } = await import("@ffmpeg/ffmpeg");
+            const { fetchFile, toBlobURL } = await import("@ffmpeg/util");
+            const ffmpeg = new FFmpeg();
+            const coreBase = "https://unpkg.com/@ffmpeg/core@0.12.10/dist/umd";
+            await ffmpeg.load({
+              coreURL: await toBlobURL(coreBase + "/ffmpeg-core.js", "text/javascript"),
+              wasmURL: await toBlobURL(coreBase + "/ffmpeg-core.wasm", "application/wasm")
+            });
+            await ffmpeg.writeFile("dashreply-input.webm", await fetchFile(recorded));
+            const exitCode = await ffmpeg.exec([
+              "-i", "dashreply-input.webm",
+              "-c:v", "libx264", "-preset", "ultrafast", "-crf", "23",
+              "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "128k",
+              "-movflags", "+faststart", "dashreply-output.mp4"
+            ]);
+            if (exitCode !== 0) throw new Error("O conversor não conseguiu gerar o MP4.");
+            const converted = await ffmpeg.readFile("dashreply-output.mp4");
+            const bytes = converted instanceof Uint8Array ? converted : new Uint8Array(converted as ArrayBuffer);
+            output = new Blob([bytes.buffer as ArrayBuffer], { type: "video/mp4" });
+            await ffmpeg.terminate();
+          }
+          if (output.size === 0 || output.type !== "video/mp4") throw new Error("O arquivo final não é um MP4 válido.");
+          const url = URL.createObjectURL(output);
+          setRenderedBlob(output);
+          setRenderedUrl(url);
+          setIsRendering(false);
+          setRenderProgress(100);
+          setRenderStatus("MP4 finalizado e validado. Este arquivo será usado no agendamento.");
+        } catch (conversionError) {
+          setIsRendering(false);
+          setRenderProgress(0);
+          setRenderStatus(conversionError instanceof Error ? "Não foi possível converter para MP4: " + conversionError.message : "Não foi possível converter o vídeo para MP4.");
+        }
       };
       recorder.start(250);
       setRenderStatus("Renderizando em tempo real. Mantenha esta aba aberta.");
