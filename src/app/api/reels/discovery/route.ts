@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { eq } from "drizzle-orm";
+import { createHash } from "node:crypto";
 import { getSession } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { configuracoes } from "@/lib/db/schema";
@@ -14,12 +15,14 @@ async function setting(key: string) {
 }
 
 export async function GET(request: Request) {
-  if (!(await getSession())) return NextResponse.json({ error: "Não autenticado." }, { status: 401 });
+  const session = await getSession();
+  if (!session) return NextResponse.json({ error: "Não autenticado." }, { status: 401 });
   try {
-    const accessToken = await setting("reels_discovery_access_token");
-    const accountId = await setting("reels_discovery_account_id");
-    const connectedUsername = await setting("reels_discovery_username");
-    const pageName = await setting("reels_discovery_page_name");
+    const userKey = createHash("sha256").update(session.email).digest("hex").slice(0, 32);
+    const accessToken = await setting(`reels_discovery_access_token:${userKey}`);
+    const accountId = await setting(`reels_discovery_account_id:${userKey}`);
+    const connectedUsername = await setting(`reels_discovery_username:${userKey}`);
+    const pageName = await setting(`reels_discovery_page_name:${userKey}`);
     const username = new URL(request.url).searchParams.get("username")?.trim().replace(/^@/, "").toLowerCase();
 
     if (!accessToken || !accountId) {
