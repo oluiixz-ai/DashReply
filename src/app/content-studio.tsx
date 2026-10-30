@@ -177,8 +177,10 @@ export default function ContentStudio() {
             ]);
             if (exitCode !== 0) throw new Error("O conversor não conseguiu gerar o MP4.");
             const converted = await ffmpeg.readFile("dashreply-output.mp4");
-            const bytes = converted instanceof Uint8Array ? converted : new Uint8Array(converted as ArrayBuffer);
-            output = new Blob([bytes.buffer as ArrayBuffer], { type: "video/mp4" });
+            const bytes = typeof converted === "string" ? new TextEncoder().encode(converted) : converted;
+            const outputBuffer = new Uint8Array(bytes.byteLength);
+            outputBuffer.set(bytes);
+            output = new Blob([outputBuffer.buffer as ArrayBuffer], { type: "video/mp4" });
             await ffmpeg.terminate();
           }
           if (output.size === 0 || output.type !== "video/mp4") throw new Error("O arquivo final não é um MP4 válido.");
