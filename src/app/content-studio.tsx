@@ -13,6 +13,7 @@ export default function ContentStudio() {
   const [logoUrl, setLogoUrl] = useState("");
   const [profileName, setProfileName] = useState("UnyFlick");
   const [handle, setHandle] = useState("@theunyfliick");
+  const [topText, setTopText] = useState("👨🏻‍💼 POV: você encontrou a única página que mostra os melhores filmes para assistir");
   const [bottomText, setBottomText] = useState("Eles encontram uma piranha pré-histórica 🦈😱");
   const [captionText, setCaptionText] = useState("Digite ou cole aqui a legenda do vídeo...");
   const [showVerifiedBadge, setShowVerifiedBadge] = useState(true);
@@ -61,8 +62,16 @@ export default function ContentStudio() {
         ctx.beginPath(); ctx.moveTo(badgeX - 7, 59); ctx.lineTo(badgeX - 2, 64); ctx.lineTo(badgeX + 8, 53); ctx.stroke();
       }
       ctx.fillStyle = "#555"; ctx.font = "30px Arial"; ctx.fillText((handle || "@seuperfil").slice(0, 40), 100, 125, 900);
+      ctx.fillStyle = "#111"; ctx.font = "bold 34px Arial"; ctx.textAlign = "left";
+      const topWords = (topText || "").split(/\\s+/); let topLine = ""; let topY = 225;
+      for (const word of topWords) {
+        const next = topLine ? topLine + " " + word : word;
+        if (ctx.measureText(next).width > 980 && topLine) { ctx.fillText(topLine, 50, topY, 980); topY += 42; topLine = word; }
+        else topLine = next;
+      }
+      if (topLine) ctx.fillText(topLine, 50, topY, 980);
       if (video.readyState >= 2 && video.videoWidth) {
-        const top = 170, height = 1280, scale = Math.max(1080 / video.videoWidth, height / video.videoHeight);
+        const top = 300, height = 1150, scale = Math.max(1080 / video.videoWidth, height / video.videoHeight);
         const width = video.videoWidth * scale, vh = video.videoHeight * scale;
         ctx.save(); ctx.beginPath(); ctx.rect(0, top, 1080, height); ctx.clip();
         ctx.drawImage(video, (1080 - width) / 2, top + (height - vh) / 2, width, vh); ctx.restore();
@@ -170,7 +179,7 @@ export default function ContentStudio() {
   }, []);
 
   function saveDraft() {
-    const draft = { profileName, handle, bottomText, captionText, showVerifiedBadge, savedAt: new Date().toISOString() };
+    const draft = { profileName, handle, topText, bottomText, captionText, showVerifiedBadge, savedAt: new Date().toISOString() };
     try {
       localStorage.setItem("dashreply-content-studio-draft", JSON.stringify(draft));
       setDraftStatus("Rascunho salvo neste navegador.");
@@ -186,6 +195,7 @@ export default function ContentStudio() {
       const draft = JSON.parse(raw);
       if (typeof draft.profileName === "string") setProfileName(draft.profileName);
       if (typeof draft.handle === "string") setHandle(draft.handle);
+      if (typeof draft.topText === "string") setTopText(draft.topText);
       if (typeof draft.bottomText === "string") setBottomText(draft.bottomText);
       if (typeof draft.captionText === "string") setCaptionText(draft.captionText);
       if (typeof draft.showVerifiedBadge === "boolean") setShowVerifiedBadge(draft.showVerifiedBadge);
@@ -270,11 +280,12 @@ export default function ContentStudio() {
       <div className="rounded-2xl border border-zinc-800 bg-[#111114] p-5 md:p-6">
         <div className="mb-5 flex items-start gap-3">
           <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-violet-500/15 text-violet-300"><LayoutTemplate size={21}/></div>
-          <div><h2 className="font-semibold text-white">Modelo de publicação</h2><p className="mt-1 text-sm leading-5 text-zinc-400">Personalize o cabeçalho, o vídeo e o texto inferior para criar seu template reutilizável.</p></div>
+          <div><h2 className="font-semibold text-white">Modelo de publicação</h2><p className="mt-1 text-sm leading-5 text-zinc-400">Personalize o cabeçalho, o texto superior, o vídeo e o texto inferior para criar seu template reutilizável.</p></div>
         </div>
         <div className="grid gap-4 sm:grid-cols-2">
           <label className="block"><span className="mb-2 block text-xs font-medium text-zinc-300">Nome do perfil</span><input value={profileName} onChange={e=>setProfileName(e.target.value)} maxLength={60} className="w-full rounded-xl border border-zinc-700 bg-zinc-950 px-3 py-2.5 text-sm text-white outline-none focus:border-violet-500"/></label>
           <label className="block"><span className="mb-2 block text-xs font-medium text-zinc-300">Usuário (@)</span><input value={handle} onChange={e=>setHandle(e.target.value)} maxLength={60} className="w-full rounded-xl border border-zinc-700 bg-zinc-950 px-3 py-2.5 text-sm text-white outline-none focus:border-violet-500"/></label>
+          <label className="block sm:col-span-2"><span className="mb-2 block text-xs font-medium text-zinc-300">Texto superior (acima do vídeo)</span><textarea value={topText} onChange={e=>setTopText(e.target.value)} maxLength={180} rows={2} placeholder="Ex.: 👨🏻‍💼 POV: você encontrou a página certa..." className="w-full resize-y rounded-xl border border-zinc-700 bg-zinc-950 px-3 py-2.5 text-sm text-white outline-none focus:border-violet-500"/></label>
           <label className="block sm:col-span-2"><span className="mb-2 block text-xs font-medium text-zinc-300">Texto de destaque inferior</span><textarea value={bottomText} onChange={e=>setBottomText(e.target.value)} maxLength={180} rows={2} className="w-full resize-y rounded-xl border border-zinc-700 bg-zinc-950 px-3 py-2.5 text-sm text-white outline-none focus:border-violet-500"/></label>
           <label className="block sm:col-span-2"><span className="mb-2 block text-xs font-medium text-zinc-300">Legenda da publicação (descrição do Reel)</span><textarea value={captionText} onChange={e=>{setCaptionText(e.target.value);setCaptionCopyStatus("");}} maxLength={2200} rows={4} placeholder="Escreva a descrição que acompanhará o Reel no Instagram, com emojis e hashtags..." className="w-full resize-y rounded-xl border border-zinc-700 bg-zinc-950 px-3 py-2.5 text-sm text-white outline-none focus:border-violet-500"/><span className="mt-1 block text-xs text-zinc-500">{captionText.length}/2200 caracteres · Não aparece dentro do vídeo.</span></label>
         </div>
@@ -308,6 +319,7 @@ export default function ContentStudio() {
           {logoUrl ? <img src={logoUrl} alt="Logo do perfil" className="h-11 w-11 rounded-full object-cover"/> : <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-zinc-950 text-violet-300"><Instagram size={21}/></div>}
           <div className="min-w-0 flex-1"><div className="flex min-w-0 items-center gap-1"><div className="truncate text-sm font-bold">{profileName || "Nome do perfil"}</div>{showVerifiedBadge && <BadgeCheck aria-label="Perfil verificado" size={13} className="relative -top-1 shrink-0 fill-blue-500 text-blue-500 [&>path:last-child]:text-white"/>}</div><div className="truncate text-xs text-zinc-600">{handle || "@seuperfil"}</div></div>
         </div>
+        {topText.trim() && <div className="px-3 py-2 text-[11px] font-semibold leading-snug text-zinc-900">{topText}</div>}
         <div className="relative aspect-[9/11] overflow-hidden bg-zinc-900">
           {videoUrl ? <video ref={previewVideoRef} src={videoUrl} controls playsInline className="h-full w-full object-cover"/> : <div className="flex h-full flex-col items-center justify-center gap-3 px-5 text-center text-white"><FileVideo size={38} className="text-zinc-500"/><span className="text-sm font-medium">Seu vídeo aparecerá aqui</span><span className="text-xs text-zinc-500">Importe um arquivo para ver a prévia</span></div>}
         </div>
